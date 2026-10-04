@@ -44,7 +44,6 @@ const M = {
   mattress: fabric(0xf7f0e4),
   // bedding: one warm orange throughout
   blanket: fabric(0xe9803a, { bumpScale: 0.016, sheen: 0.85, sheenColor: new THREE.Color(0xffd2a8) }),
-  blanketFold: fabric(0xe9803a, { bumpScale: 0.016, sheen: 0.85, sheenColor: new THREE.Color(0xffd2a8) }),
   pillow: fabric(0xfff9ee, { bumpScale: 0.02 }),
   pillowAccent: fabric(0xe9803a, { bumpScale: 0.02, sheen: 0.85, sheenColor: new THREE.Color(0xffd2a8) }),
   cushion: fabric(0xe7bb8e, { bumpScale: 0.02 }),
@@ -183,54 +182,89 @@ const smooth = (a, b, x) => {
 const puffNoise = (x, z) =>
   (Math.sin(x * 1.7 + Math.sin(z * 1.3)) * Math.cos(z * 1.1 + Math.sin(x * 0.9))) * 0.5 + 0.5;
 
-/** A duvet draped over the mattress: puffy on top, falling over the sides and foot. */
+/**
+ * A duvet with real thickness: a gently puffed top surface, an underside
+ * offset along the surface normal, and side walls stitched around the rim.
+ * The head edge lies flat on the sheet; the sides and foot drape down.
+ */
 function buildDuvet(cx, cz, bw, bl, topY) {
+  const thick = 0.07;
   const pad = 0.4;
+  const segX = 44, segZ = 52;
   const zStart = cz - bl / 2 + bl * 0.4;
   const zEnd = cz + bl / 2 + 0.3;
   const width = bw + pad * 2;
   const length = zEnd - zStart;
-  const geo = new THREE.PlaneGeometry(width, length, 40, 48);
-  geo.rotateX(-Math.PI / 2);
-  geo.translate(cx, 0, (zStart + zEnd) / 2);
-  const pos = geo.attributes.position;
+  const top = new THREE.PlaneGeometry(width, length, segX, segZ);
+  top.rotateX(-Math.PI / 2); // row 0 ends up at the head (zStart)
+  top.translate(cx, 0, (zStart + zEnd) / 2);
+  const pos = top.attributes.position;
   const footEdge = cz + bl / 2 - 0.02;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
     const z = pos.getZ(i);
     const lx = x - cx;
-    const inX = bw / 2 - 0.03 - Math.abs(lx);
-    const inZ = footEdge - z;
-    const inside = Math.min(inX, inZ);
+    const inside = Math.min(bw / 2 - 0.02 - Math.abs(lx), footEdge - z);
     const n1 = puffNoise(lx * 2.4, z * 2.1);
     const n2 = puffNoise(lx * 5.5 + 3.0, z * 4.8 - 1.0);
-    let y;
+    let y = topY + thick;
     if (inside > 0) {
-      const puff = 0.1 + 0.07 * n1 + 0.03 * n2;
-      // thinner at the edge so it rolls over nicely
-      y = topY + 0.03 + puff * (0.45 + 0.55 * smooth(0, 0.35, inside));
+      // soft puff, fading to flat at the mattress edges and at the head edge
+      const puff = (0.045 + 0.045 * n1 + 0.02 * n2) * smooth(0, 0.35, inside) * smooth(0, 0.3, z - zStart);
+      y += puff;
     } else {
       const out = -inside;
-      y = topY + 0.06 - Math.min(out * 1.7, 0.62) + 0.015 * n2;
-      // keep the fabric hugging the mattress corner instead of poking through it
-      y -= 0.03 * smooth(0, 0.08, out);
+      y += -Math.min(out * 1.7, 0.62) + 0.012 * n2 * smooth(0, 0.1, out);
     }
-    // a folded-back look at the head end
-    const headFade = smooth(0, 0.3, z - zStart);
-    y = THREE.MathUtils.lerp(topY + 0.14, y, headFade);
     pos.setY(i, y);
   }
-  geo.computeVertexNormals();
-  const duvet = new THREE.Mesh(geo, M.blanket);
-  duvet.material.side = THREE.DoubleSide;
-  duvet.castShadow = true;
-  duvet.receiveShadow = true;
+  top.computeVertexNormals();
+
+  // underside: the top pushed down along its normals
+  const bottom = top.clone();
+  const bp = bottom.attributes.position;
+  const nrm = top.attributes.normal;
+  for (let i = 0; i < bp.count; i++) {
+    bp.setXYZ(i, pos.getX(i) - nrm.getX(i) * thick, pos.getY(i) - nrm.getY(i) * thick, pos.getZ(i) - nrm.getZ(i) * thick);
+  }
+  const idx = bottom.index.array;
+  for (let k = 0; k < idx.length; k += 3) {
+    const t = idx[k + 1]; idx[k + 1] = idx[k + 2]; idx[k + 2] = t;
+  }
+  bottom.computeVertexNormals();
+
+  // side walls around the rim
+  const cols = segX + 1;
+  const rim = [];
+  for (let ix = 0; ix < segX; ix++) rim.push(ix);                              // head edge
+  for (let iz = 0; iz < segZ; iz++) rim.push(iz * cols + segX);                // right edge
+  for (let ix = segX; ix > 0; ix--) rim.push(segZ * cols + ix);                // foot edge
+  for (let iz = segZ; iz > 0; iz--) rim.push(iz * cols);                       // left edge
+  const sidePos = [];
+  const sideUv = [];
+  for (let k = 0; k < rim.length; k++) {
+    const a = rim[k], b = rim[(k + 1) % rim.length];
+    const quad = [
+      [pos, a], [pos, b], [bp, b],
+      [pos, a], [bp, b], [bp, a],
+    ];
+    for (const [src, i] of quad) sidePos.push(src.getX(i), src.getY(i), src.getZ(i));
+    const u0 = k / rim.length, u1 = (k + 1) / rim.length;
+    sideUv.push(u0 * 40, 1, u1 * 40, 1, u1 * 40, 0, u0 * 40, 1, u1 * 40, 0, u0 * 40, 0);
+  }
+  const sides = new THREE.BufferGeometry();
+  sides.setAttribute('position', new THREE.Float32BufferAttribute(sidePos, 3));
+  sides.setAttribute('uv', new THREE.Float32BufferAttribute(sideUv, 2));
+  sides.computeVertexNormals();
+
   const g = new THREE.Group();
-  g.add(duvet);
-  // rolled-over top edge
-  const roll = cylinder(0.085, 0.085, bw + 0.12, M.blanketFold, cx, topY + 0.12, zStart + 0.02, 14);
-  roll.rotation.z = Math.PI / 2;
-  g.add(roll);
+  for (const geo of [top, bottom, sides]) {
+    const m = new THREE.Mesh(geo, M.blanket);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+  }
+  M.blanket.side = THREE.DoubleSide; // the stitched rim does not care about winding
   return g;
 }
 
@@ -548,7 +582,8 @@ function buildTallPlant(x, z) {
   for (let i = 0; i < n; i++) {
     const t = 0.18 + (i / (n - 1)) * 0.82;
     const at = trunkCurve.getPoint(t);
-    const az = i * 2.39996;
+    // golden-angle spiral, folded into a 250-degree fan that faces away from the back wall
+    const az = Math.PI * 0 + (((i * 2.39996) % (Math.PI * 2)) / (Math.PI * 2) - 0.5) * THREE.MathUtils.degToRad(250);
     const scale = 0.42 + 0.22 * Math.sin(t * Math.PI) + prnd() * 0.06;
     // short petiole out from the trunk
     const out = new THREE.Vector3(Math.sin(az), 0.45, Math.cos(az)).multiplyScalar(0.06);
@@ -585,10 +620,13 @@ function buildMonstera(x, z) {
     m.computeVertexNormals();
     return m;
   });
+  // fan the leaves toward the room (+x, -z) so none push through the wall or off the floor
   const n = 7;
+  const fanCenter = Math.atan2(1, -1);
+  const fanSpread = 2.3;
   for (let i = 0; i < n; i++) {
-    const az = (i / n) * Math.PI * 2 + prnd() * 0.4;
-    const reach = 0.35 + prnd() * 0.25;
+    const az = fanCenter + ((i + 0.5) / n - 0.5) * fanSpread + (prnd() - 0.5) * 0.2;
+    const reach = 0.3 + prnd() * 0.2;
     const height = 0.55 + prnd() * 0.45;
     const from = new THREE.Vector3(Math.sin(az) * 0.05, top, Math.cos(az) * 0.05);
     const to = new THREE.Vector3(Math.sin(az) * reach, top + height, Math.cos(az) * reach);
@@ -596,7 +634,7 @@ function buildMonstera(x, z) {
     g.add(mesh);
     const k = i % 3;
     const geo = i % 2 ? geos[k] : mirrored[k];
-    g.add(placeLeaf(geo, i % 3 === 0 ? P.monsteraLight : P.monstera, to, az, 0.25 + prnd() * 0.3, 0.6 + prnd() * 0.18, (prnd() - 0.5) * 0.4));
+    g.add(placeLeaf(geo, i % 3 === 0 ? P.monsteraLight : P.monstera, to, az, 0.3 + prnd() * 0.3, 0.55 + prnd() * 0.12, (prnd() - 0.5) * 0.4));
   }
   // an unfurling new leaf
   const curl = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.32, 7), P.monsteraLight);
@@ -838,7 +876,7 @@ export function buildRoom() {
   const rp = buildRecordPlayer();
   group.add(rp.group);
   group.add(buildTallPlant(3.5, -3.3));
-  group.add(buildMonstera(-3.25, 3.3));
+  group.add(buildMonstera(-3.3, 3.2));
   group.add(buildSucculent(2.55, 1.92, -3.66, 0.9));
   group.add(buildGallery());
   const sl = buildStringLights();

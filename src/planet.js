@@ -407,12 +407,6 @@ function buildRose(dx, dz) {
   );
   dome.position.y = 0.12 + 0.35 + 0.42;
   g.add(dome);
-  const knob = new THREE.Mesh(
-    new THREE.SphereGeometry(0.05, 12, 10),
-    new THREE.MeshStandardMaterial({ color: 0xd6a85c, metalness: 0.8, roughness: 0.3 }),
-  );
-  knob.position.y = 0.12 + 0.35 + 0.42 + 0.35 + 0.42 + 0.03; // top of the capsule
-  g.add(knob);
 
   const { position, quaternion } = onPlanet(dx, dz, 0);
   g.position.copy(position);
