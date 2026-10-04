@@ -241,11 +241,14 @@ function buildBookshelf() {
 
 function buildRecordPlayer() {
   const g = new THREE.Group();
-  const cx = 2.1, cz = -3.35;
+  // cabinet sits against wall A, flush with the right side of the bookshelf
+  const cx = 1.55, cz = -3.35;
   g.add(box(1.6, 0.8, 0.6, M.walnut, cx, 0.4, cz));
   g.add(box(1.5, 0.02, 0.5, M.oak, cx, 0.81, cz));
-  g.add(box(0.7, 0.3, 0.02, M.oak, cx - 0.4, 0.4, cz + 0.31)); // cabinet door
+  g.add(box(0.7, 0.3, 0.02, M.oak, cx - 0.4, 0.4, cz + 0.31)); // cabinet doors
   g.add(box(0.7, 0.3, 0.02, M.oak, cx + 0.4, 0.4, cz + 0.31));
+  g.add(cylinder(0.02, 0.02, 0.03, M.brass, cx - 0.05, 0.4, cz + 0.33, 8));
+  g.add(cylinder(0.02, 0.02, 0.03, M.brass, cx + 0.05, 0.4, cz + 0.33, 8));
   // legs
   for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     const leg = cylinder(0.03, 0.02, 0.25, M.walnut, cx + dx * 0.7, 0.0, cz + dz * 0.22, 6);
@@ -253,8 +256,7 @@ function buildRecordPlayer() {
     g.add(leg);
   }
   // turntable
-  const plinth = box(0.95, 0.1, 0.56, M.dark, cx - 0.1, 0.87, cz);
-  g.add(plinth);
+  g.add(box(0.95, 0.1, 0.56, M.dark, cx - 0.1, 0.87, cz));
   g.add(cylinder(0.38, 0.38, 0.03, M.metal, cx - 0.2, 0.935, cz, 32));
   const vinylMat = new THREE.MeshStandardMaterial({ map: makeVinylTexture(), roughness: 0.55 });
   const vinyl = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.012, 48), [M.dark, vinylMat, M.dark]);
@@ -263,21 +265,26 @@ function buildRecordPlayer() {
   g.add(vinyl);
   g.add(cylinder(0.012, 0.012, 0.05, M.metal, cx - 0.2, 0.98, cz, 8));
   // tonearm
-  const armBase = cylinder(0.06, 0.06, 0.06, M.metal, cx + 0.28, 0.95, cz - 0.18, 12);
-  g.add(armBase);
+  g.add(cylinder(0.06, 0.06, 0.06, M.metal, cx + 0.28, 0.95, cz - 0.18, 12));
   const arm = box(0.03, 0.02, 0.5, M.metal, cx + 0.2, 0.99, cz + 0.02);
   arm.rotation.y = 0.35;
   g.add(arm);
-  // speaker on the floor to the left of the cabinet
-  g.add(box(0.42, 0.62, 0.4, M.speaker, 0.98, 0.31, -3.4, { rounded: 0.02 }));
-  g.add(cylinder(0.12, 0.12, 0.02, M.speakerCone, 0.98, 0.42, -3.19, 20)).rotation.x = Math.PI / 2;
-  g.add(cylinder(0.06, 0.06, 0.02, M.speakerCone, 0.98, 0.16, -3.19, 20)).rotation.x = Math.PI / 2;
+
+  // speaker on the floor to the right of the cabinet, under the window
+  const sx = 2.78, sz = -3.4;
+  g.add(box(0.42, 0.62, 0.4, M.speaker, sx, 0.31, sz, { rounded: 0.02 }));
+  for (const [r, y] of [[0.12, 0.42], [0.06, 0.16]]) {
+    const cone = cylinder(r, r, 0.02, M.speakerCone, sx, y, sz + 0.21, 20);
+    cone.rotation.x = Math.PI / 2;
+    g.add(cone);
+  }
   // a few records leaning against the speaker
-  for (let i = 0; i < 3; i++) {
-    const r = box(0.02, 0.62, 0.62, mat([0xe4ad4c, 0x4f7a9c, 0xb3462f][i]), 1.28 + i * 0.03, 0.33, -3.4);
+  const sleeves = [0xe4ad4c, 0x4f7a9c, 0xb3462f];
+  sleeves.forEach((col, i) => {
+    const r = box(0.02, 0.62, 0.62, mat(col), sx + 0.25 + i * 0.03, 0.33, sz);
     r.rotation.z = -0.12 - i * 0.05;
     g.add(r);
-  }
+  });
   return { group: g, vinyl };
 }
 
@@ -532,7 +539,7 @@ export function buildRoom() {
   group.add(buildBookshelf());
   const rp = buildRecordPlayer();
   group.add(rp.group);
-  group.add(buildTallPlant(3.35, -3.25));
+  group.add(buildTallPlant(3.5, -3.3));
   group.add(buildMonstera(-3.25, 3.3));
   group.add(buildSmallPlant(2.6, 1.95, -3.6, 0.75));
   group.add(buildGallery());
