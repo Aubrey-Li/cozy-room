@@ -20,7 +20,7 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 - The clock in the corner shows the local time the scene is rendering.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
 - Drag to orbit around the planet, scroll or pinch to zoom, right-drag (or `W A S D` / arrow keys) to pan. Press `R` to reset the view.
-- Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`. Add `?z=2.5` to start zoomed in.
+- Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`. Add `?z=2.5` to start zoomed in, and `?target=x,y,z` to centre the view on a point.
 
 ## Layout
 
@@ -33,6 +33,7 @@ src/sky.js        screen-space sky gradient, stars, sun and moon
 src/planet.js     the little planet, grass, flowers, trees, rose
 src/room.js       the room and everything in it
 src/fireflies.js  fireflies over the meadow at night
+src/foliage.js    shaped leaf and petal geometry, pots, stems
 src/wind.js       vertex-shader wind sway for leaves and grass (also in the shadow pass)
 src/textures.js   procedural canvas textures
 ```

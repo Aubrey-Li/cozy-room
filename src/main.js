@@ -56,10 +56,18 @@ controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 {
   // optional ?z= start zoom, handy for sharing a close-up
-  const z = Number(new URLSearchParams(location.search).get('z'));
+  const q = new URLSearchParams(location.search);
+  const z = Number(q.get('z'));
   if (z > 0) {
     camera.zoom = THREE.MathUtils.clamp(z, controls.minZoom, controls.maxZoom);
     camera.updateProjectionMatrix();
+  }
+  // optional ?target=x,y,z to centre the view on a point
+  const tgt = (q.get('target') || '').split(',').map(Number);
+  if (tgt.length === 3 && tgt.every(Number.isFinite)) {
+    const delta = new THREE.Vector3(...tgt).sub(controls.target);
+    controls.target.add(delta);
+    camera.position.add(delta);
   }
 }
 controls.update();

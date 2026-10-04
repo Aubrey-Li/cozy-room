@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { makeLeafTexture } from './textures.js';
+import { leafGeometry, profiles, leafMaterial, placeLeaf } from './foliage.js';
 
 export const PLANET_R = 22;
 export const PLANET_CENTER = new THREE.Vector3(0, -PLANET_R, 0);
@@ -139,21 +140,21 @@ function buildFlowers() {
   return g;
 }
 
-let leafMaterial = null;
-let leafDepth = null;
+let treeLeafMaterial = null;
+let treeLeafDepth = null;
 function getLeafMaterial(wind) {
-  if (!leafMaterial) {
+  if (!treeLeafMaterial) {
     const opts = { amount: 0.55, flutter: 1 };
-    leafMaterial = new THREE.MeshStandardMaterial({
+    treeLeafMaterial = new THREE.MeshStandardMaterial({
       map: makeLeafTexture(),
       alphaTest: 0.5,
       side: THREE.DoubleSide,
       roughness: 0.9,
     });
-    wind.patch(leafMaterial, opts);
-    leafDepth = wind.depthFor(leafMaterial, opts);
+    wind.patch(treeLeafMaterial, opts);
+    treeLeafDepth = wind.depthFor(treeLeafMaterial, opts);
   }
-  return { material: leafMaterial, depth: leafDepth };
+  return { material: treeLeafMaterial, depth: treeLeafDepth };
 }
 
 function buildTree(dx, dz, scale, wind) {
@@ -262,53 +263,157 @@ function buildStones() {
   return g;
 }
 
+/** Rose bloom: a tight spiral bud wrapped by layers of opening, outward-curling petals. */
+function buildBloom() {
+  const g = new THREE.Group();
+  const deep = new THREE.MeshStandardMaterial({ color: 0x9e1b2c, roughness: 0.55, side: THREE.DoubleSide });
+  const mid = new THREE.MeshStandardMaterial({ color: 0xc8243a, roughness: 0.5, side: THREE.DoubleSide });
+  const outer = new THREE.MeshStandardMaterial({ color: 0xdc3a4c, roughness: 0.5, side: THREE.DoubleSide });
+  // inner petals are cupped toward the centre (negative cup); outer ones flare out at the tip (positive curl)
+  const layers = [
+    { n: 3, len: 0.09, width: 0.8, pitch: 1.5, r: 0.004, curl: -0.04, cup: -0.4, mat: deep, y: 0.05 },
+    { n: 4, len: 0.11, width: 0.9, pitch: 1.44, r: 0.012, curl: -0.02, cup: -0.38, mat: deep, y: 0.035 },
+    { n: 5, len: 0.13, width: 1.0, pitch: 1.34, r: 0.022, curl: 0.03, cup: -0.34, mat: mid, y: 0.022 },
+    { n: 5, len: 0.15, width: 1.05, pitch: 1.2, r: 0.032, curl: 0.1, cup: -0.28, mat: mid, y: 0.01 },
+    { n: 6, len: 0.16, width: 1.1, pitch: 1.0, r: 0.04, curl: 0.2, cup: -0.2, mat: outer, y: 0.0 },
+    { n: 5, len: 0.15, width: 1.1, pitch: 0.7, r: 0.044, curl: 0.26, cup: -0.12, mat: outer, y: -0.008 },
+  ];
+  layers.forEach((L, li) => {
+    const geo = leafGeometry(profiles.petal, { length: 1, width: L.width, curl: L.curl, cup: L.cup, segments: 18 });
+    for (let i = 0; i < L.n; i++) {
+      const az = (i / L.n) * Math.PI * 2 + li * 0.62;
+      const at = new THREE.Vector3(Math.sin(az) * L.r, L.y, Math.cos(az) * L.r);
+      const petal = placeLeaf(geo, L.mat, at, az, L.pitch, L.len, (i % 2 ? 1 : -1) * 0.08);
+      g.add(petal);
+    }
+  });
+  // a tight centre spiral
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 8), deep);
+  core.scale.set(1, 1.6, 1);
+  core.position.y = 0.075;
+  g.add(core);
+  // receptacle and sepals curling down beneath the bloom
+  const green = leafMaterial(0x3d7a2e, { map: null });
+  const hip = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), green);
+  hip.scale.set(1, 0.8, 1);
+  hip.position.y = -0.01;
+  g.add(hip);
+  const sepalGeo = leafGeometry(profiles.sepal, { length: 1, width: 0.5, curl: 0.25, cup: 0.1, segments: 10 });
+  for (let i = 0; i < 5; i++) {
+    const az = (i / 5) * Math.PI * 2 + 0.3;
+    g.add(placeLeaf(sepalGeo, green, new THREE.Vector3(Math.sin(az) * 0.02, -0.005, Math.cos(az) * 0.02), az, -0.35, 0.11));
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
+/** A compound rose leaf: a short rachis with a terminal leaflet and two opposite pairs. */
+function buildRoseLeaf(material) {
+  const g = new THREE.Group();
+  const leafletGeo = leafGeometry(profiles.roseLeaf, { length: 1, width: 0.62, curl: 0.12, cup: 0.18, segments: 30 });
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f7a2f, roughness: 0.9 });
+  const rachis = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.006, 0.2, 5), stemMat);
+  rachis.rotation.x = Math.PI / 2;
+  rachis.position.z = 0.1;
+  g.add(rachis);
+  g.add(placeLeaf(leafletGeo, material, new THREE.Vector3(0, 0, 0.2), 0, 0.05, 0.11));
+  for (const [zz, s] of [[0.13, 0.095], [0.06, 0.08]]) {
+    g.add(placeLeaf(leafletGeo, material, new THREE.Vector3(0, 0, zz), Math.PI / 2 - 0.5, 0.1, s, 0.2));
+    g.add(placeLeaf(leafletGeo, material, new THREE.Vector3(0, 0, zz), -Math.PI / 2 + 0.5, 0.1, s, -0.2));
+  }
+  g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return g;
+}
+
 /** A single rose under a glass cloche, as a nod to the Little Prince. */
 function buildRose(dx, dz) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.5, 0.55, 0.12, 16),
+    new THREE.CylinderGeometry(0.5, 0.55, 0.12, 24),
     new THREE.MeshStandardMaterial({ color: 0xd9c7a8, roughness: 0.9 }),
   );
   base.position.y = 0.06;
   base.receiveShadow = true;
   g.add(base);
-  const stem = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.025, 0.035, 0.9, 6),
-    new THREE.MeshStandardMaterial({ color: 0x3f7a2f, roughness: 1 }),
+  const soil = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.18, 0.04, 16),
+    new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 1 }),
   );
-  stem.position.y = 0.57;
-  g.add(stem);
-  const leaf = new THREE.Mesh(
-    new THREE.SphereGeometry(0.12, 6, 4),
-    new THREE.MeshStandardMaterial({ color: 0x4f9a3a, roughness: 1 }),
-  );
-  leaf.scale.set(1.2, 0.3, 0.6);
-  leaf.position.set(0.12, 0.5, 0);
-  leaf.rotation.z = -0.5;
-  g.add(leaf);
-  const bloom = new THREE.Mesh(
-    new THREE.SphereGeometry(0.17, 8, 6),
-    new THREE.MeshStandardMaterial({ color: 0xe43d4f, roughness: 0.8 }),
-  );
-  bloom.scale.set(1, 1.2, 1);
-  bloom.position.y = 1.08;
-  bloom.castShadow = true;
+  soil.position.y = 0.13;
+  g.add(soil);
+
+  // stem: a gentle S-curve
+  const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f7a2f, roughness: 0.85 });
+  const stemCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0, 0.13, 0),
+    new THREE.Vector3(0.03, 0.4, 0.01),
+    new THREE.Vector3(-0.02, 0.72, -0.01),
+    new THREE.Vector3(0.0, 0.98, 0.0),
+  ]);
+  const stemMesh = new THREE.Mesh(new THREE.TubeGeometry(stemCurve, 30, 0.014, 7), stemMat);
+  stemMesh.castShadow = true;
+  g.add(stemMesh);
+
+  // thorns
+  const thornMat = new THREE.MeshStandardMaterial({ color: 0x6a5a3a, roughness: 0.8 });
+  const thornGeo = new THREE.ConeGeometry(0.008, 0.035, 5);
+  const up = new THREE.Vector3(0, 1, 0);
+  for (const [t, az] of [[0.22, 0.4], [0.38, 2.6], [0.55, 4.5], [0.7, 1.4], [0.83, 3.6]]) {
+    const p = stemCurve.getPoint(t);
+    const outDir = new THREE.Vector3(Math.sin(az), 0.55, Math.cos(az)).normalize();
+    const th = new THREE.Mesh(thornGeo, thornMat);
+    th.position.copy(p).addScaledVector(outDir, 0.018);
+    th.quaternion.setFromUnitVectors(up, outDir);
+    g.add(th);
+  }
+
+  // two compound leaves off the stem
+  const leafMat = leafMaterial(0x3f8a34);
+  for (const [t, az] of [[0.36, 0.9], [0.6, 4.0]]) {
+    const leaf = buildRoseLeaf(leafMat);
+    leaf.position.copy(stemCurve.getPoint(t));
+    leaf.rotation.order = 'YXZ';
+    leaf.rotation.y = az;
+    leaf.rotation.x = -0.45; // angle up from the stem
+    g.add(leaf);
+  }
+
+  const bloom = buildBloom();
+  bloom.scale.setScalar(1.45);
+  bloom.position.copy(stemCurve.getPoint(1));
+  bloom.rotation.z = 0.08;
   g.add(bloom);
+
+  // one fallen petal on the base
+  const fallen = placeLeaf(
+    leafGeometry(profiles.petal, { length: 1, width: 1, curl: 0.15, cup: -0.2, segments: 12 }),
+    new THREE.MeshStandardMaterial({ color: 0xc8243a, roughness: 0.55, side: THREE.DoubleSide }),
+    new THREE.Vector3(0.25, 0.125, 0.12), 2.2, -0.02, 0.13,
+  );
+  g.add(fallen);
+
   const dome = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.42, 0.7, 6, 16),
+    new THREE.CapsuleGeometry(0.42, 0.7, 6, 20),
     new THREE.MeshPhysicalMaterial({
       color: 0xdff4ff,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.18,
       roughness: 0.05,
       metalness: 0,
-      transmission: 0,
+      clearcoat: 1,
       side: THREE.DoubleSide,
       depthWrite: false,
     }),
   );
   dome.position.y = 0.12 + 0.35 + 0.42;
   g.add(dome);
+  const knob = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 12, 10),
+    new THREE.MeshStandardMaterial({ color: 0xd6a85c, metalness: 0.8, roughness: 0.3 }),
+  );
+  knob.position.y = 0.12 + 0.35 + 0.42 + 0.35 + 0.42 + 0.03; // top of the capsule
+  g.add(knob);
+
   const { position, quaternion } = onPlanet(dx, dz, 0);
   g.position.copy(position);
   g.quaternion.copy(quaternion);
