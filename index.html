@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Cozy Room</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+
+  <div id="hud">
+    <div class="card">
+      <div class="row">
+        <span id="live-dot" class="dot live" title="Following your local clock"></span>
+        <span id="clock">--:--</span>
+      </div>
+      <div id="phase">&nbsp;</div>
+      <div class="controls">
+        <input id="time-slider" type="range" min="0" max="1439" step="1" value="720" aria-label="Scrub time of day">
+        <button id="live-btn" type="button">Live</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
