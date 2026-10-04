@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { makeLeafTexture } from './textures.js';
 
 export const PLANET_R = 22;
 export const PLANET_CENTER = new THREE.Vector3(0, -PLANET_R, 0);
@@ -55,12 +56,15 @@ function buildGround() {
   return mesh;
 }
 
-function buildGrass() {
+function buildGrass(wind) {
   const count = 3200;
   const geo = new THREE.ConeGeometry(0.065, 0.4, 4, 1);
   geo.translate(0, 0.2, 0);
   const mat = new THREE.MeshStandardMaterial({ roughness: 1, flatShading: true });
+  const windOpts = { pinned: true, height: 0.4, amount: 0.9 };
+  wind.patch(mat, windOpts);
   const mesh = new THREE.InstancedMesh(geo, mat, count);
+  mesh.customDepthMaterial = wind.depthFor(mat, windOpts);
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const yaw = new THREE.Quaternion();
@@ -135,14 +139,47 @@ function buildFlowers() {
   return g;
 }
 
-function buildTree(dx, dz, scale = 1) {
+let leafMaterial = null;
+let leafDepth = null;
+function getLeafMaterial(wind) {
+  if (!leafMaterial) {
+    const opts = { amount: 0.55, flutter: 1 };
+    leafMaterial = new THREE.MeshStandardMaterial({
+      map: makeLeafTexture(),
+      alphaTest: 0.5,
+      side: THREE.DoubleSide,
+      roughness: 0.9,
+    });
+    wind.patch(leafMaterial, opts);
+    leafDepth = wind.depthFor(leafMaterial, opts);
+  }
+  return { material: leafMaterial, depth: leafDepth };
+}
+
+function buildTree(dx, dz, scale, wind) {
   const g = new THREE.Group();
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 });
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.4, 7), trunkMat);
-  trunk.position.y = 1.2;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 2.6, 7), trunkMat);
+  trunk.position.y = 1.3;
   trunk.castShadow = true;
   g.add(trunk);
-  const greens = [0x4f8f3a, 0x5fa346, 0x3f7a2f, 0x6db052];
+  // a few branches reaching into the canopy
+  const branches = [
+    [0.9, 2.5, 0.3], [-0.8, 2.6, -0.4], [0.2, 2.3, -0.9], [-0.3, 2.4, 0.9],
+  ];
+  for (const [bx, by, bz] of branches) {
+    const from = new THREE.Vector3(0, 2.0, 0);
+    const to = new THREE.Vector3(bx, by, bz);
+    const dir = to.clone().sub(from);
+    const len = dir.length();
+    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.1, len, 5), trunkMat);
+    b.position.copy(from).addScaledVector(dir, 0.5);
+    b.quaternion.setFromUnitVectors(_up, dir.normalize());
+    b.castShadow = true;
+    g.add(b);
+  }
+
+  // canopy: dark cores so the crown is not hollow, plus hundreds of leaf cards
   const blobs = [
     [0, 3.0, 0, 1.45],
     [0.9, 2.5, 0.3, 1.0],
@@ -151,16 +188,53 @@ function buildTree(dx, dz, scale = 1) {
     [-0.3, 2.4, 0.9, 0.85],
     [0.1, 3.9, 0.1, 0.9],
   ];
-  blobs.forEach(([x, y, z, r], i) => {
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(r, 9, 7),
-      new THREE.MeshStandardMaterial({ color: greens[i % greens.length], roughness: 1, flatShading: true }),
-    );
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    g.add(mesh);
-  });
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x2f5f2a, roughness: 1 });
+  let total = 0;
+  for (const [x, y, z, r] of blobs) {
+    const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.62, 8, 6), coreMat);
+    core.position.set(x, y, z);
+    core.castShadow = true;
+    g.add(core);
+    total += Math.round(r * r * 160);
+  }
+
+  const { material, depth } = getLeafMaterial(wind);
+  const leafGeo = new THREE.PlaneGeometry(0.46, 0.64);
+  leafGeo.translate(0, 0.2, 0); // pivot near the stem end
+  const leaves = new THREE.InstancedMesh(leafGeo, material, total);
+  leaves.customDepthMaterial = depth;
+  const m = new THREE.Matrix4();
+  const pos = new THREE.Vector3();
+  const q = new THREE.Quaternion();
+  const roll = new THREE.Quaternion();
+  const sc = new THREE.Vector3();
+  const dir = new THREE.Vector3();
+  const col = new THREE.Color();
+  const greens = [0x4f9a3a, 0x5fae46, 0x3f8230, 0x79bf58, 0x8fc96a, 0x6aa84a];
+  let i = 0;
+  for (const [x, y, z, r] of blobs) {
+    const n = Math.round(r * r * 160);
+    for (let k = 0; k < n && i < total; k++, i++) {
+      dir.set(rnd() * 2 - 1, rnd() * 2 - 1, rnd() * 2 - 1).normalize();
+      const rad = r * (0.5 + 0.5 * Math.sqrt(rnd()));
+      pos.set(x, y, z).addScaledVector(dir, rad);
+      q.setFromUnitVectors(_up, dir); // leaf points outward from the blob
+      roll.setFromAxisAngle(_up, rnd() * Math.PI * 2);
+      q.multiply(roll);
+      const s2 = 0.75 + rnd() * 0.6;
+      sc.set(s2, s2, s2);
+      m.compose(pos, q, sc);
+      leaves.setMatrixAt(i, m);
+      col.setHex(greens[Math.floor(rnd() * greens.length)]);
+      if (rnd() < 0.06) col.setHex(0xd9c25a); // the odd yellowing leaf
+      leaves.setColorAt(i, col);
+    }
+  }
+  leaves.count = i;
+  leaves.castShadow = true;
+  leaves.receiveShadow = true;
+  g.add(leaves);
+
   const { position, quaternion } = onPlanet(dx, dz, -0.1);
   g.position.copy(position);
   g.quaternion.copy(quaternion);
@@ -241,14 +315,14 @@ function buildRose(dx, dz) {
   return g;
 }
 
-export function buildPlanet() {
+export function buildPlanet(wind) {
   const group = new THREE.Group();
   group.add(buildGround());
-  group.add(buildGrass());
+  group.add(buildGrass(wind));
   group.add(buildFlowers());
-  group.add(buildTree(-8.5, 6.5, 1.1));
-  group.add(buildTree(9.5, -3.5, 0.85));
-  group.add(buildTree(-3.0, 11.5, 0.7));
+  group.add(buildTree(-8.5, 6.5, 1.1, wind));
+  group.add(buildTree(9.5, -3.5, 0.85, wind));
+  group.add(buildTree(-3.0, 11.5, 0.7, wind));
   group.add(buildStones());
   group.add(buildRose(-6.6, 2.4));
   return group;

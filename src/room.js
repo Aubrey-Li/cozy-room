@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import { makePlankTexture, makePhotoTexture, makeVinylTexture } from './textures.js';
+import {
+  makePlankTexture, makePhotoTexture, makeVinylTexture,
+  makeFabricBump, makeKnitTexture, makePlasterBump, makeWoodTexture,
+} from './textures.js';
 
 // Room footprint: x in [-4, 4], z in [-4, 4]. Floor top at y = 0.
 // Back walls: wall A along z = -4 (with the window), wall B along x = -4.
@@ -9,21 +12,45 @@ const WALL_H = 5;
 const WALL_T = 0.3;
 
 const mat = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, metalness: 0, ...opts });
+const fabric = (color, opts = {}) =>
+  new THREE.MeshPhysicalMaterial({
+    color,
+    roughness: 1,
+    metalness: 0,
+    bumpMap: T.fabric,
+    bumpScale: 0.012,
+    sheen: 0.7,
+    sheenRoughness: 0.8,
+    sheenColor: new THREE.Color(0xffffff),
+    ...opts,
+  });
+
+const T = {
+  fabric: makeFabricBump(),
+  plaster: makePlasterBump(),
+  walnut: makeWoodTexture(0x8a5a36, 0x4a2c15, 512, 5),
+  oak: makeWoodTexture(0xd2a874, 0x8a6236, 512, 9),
+  knit: makeKnitTexture(0xd98c6b),
+  knitDark: makeKnitTexture(0xc87a5c),
+  knitSand: makeKnitTexture(0xe7bb8e),
+  weave: makeFabricBump(256, 28),
+};
+T.weave.repeat.set(6, 6);
 
 const M = {
-  wall: mat(0xf4e8d4, { roughness: 0.95 }),
+  wall: mat(0xf4e8d4, { roughness: 0.95, bumpMap: T.plaster, bumpScale: 0.02 }),
   wallOuter: mat(0xe6d6bd, { roughness: 0.95 }),
   trim: mat(0xfbf7f0),
-  walnut: mat(0x7a4f2e, { roughness: 0.7 }),
-  oak: mat(0xc9a06e, { roughness: 0.75 }),
-  mattress: mat(0xf7f0e4),
-  blanket: mat(0xd98c6b, { roughness: 1 }),
-  blanketFold: mat(0xc87a5c, { roughness: 1 }),
-  pillow: mat(0xfff9ee),
-  pillowAccent: mat(0xe7bb8e),
-  rugOuter: mat(0xc96f5a, { roughness: 1 }),
-  rugInner: mat(0xf1dec3, { roughness: 1 }),
-  rugStripe: mat(0x8d5a4a, { roughness: 1 }),
+  walnut: mat(0xffffff, { roughness: 0.65, map: T.walnut }),
+  oak: mat(0xffffff, { roughness: 0.7, map: T.oak }),
+  mattress: fabric(0xf7f0e4),
+  blanket: fabric(0xffffff, { map: T.knit, bumpMap: T.knit, bumpScale: 0.03, sheen: 0.9 }),
+  blanketFold: fabric(0xffffff, { map: T.knitDark, bumpMap: T.knitDark, bumpScale: 0.03, sheen: 0.9 }),
+  pillow: fabric(0xfff9ee, { bumpScale: 0.02 }),
+  pillowAccent: fabric(0xffffff, { map: T.knitSand, bumpMap: T.knitSand, bumpScale: 0.025 }),
+  rugOuter: mat(0xc96f5a, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
+  rugInner: mat(0xf1dec3, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
+  rugStripe: mat(0x8d5a4a, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
   pot: mat(0xc9714a, { roughness: 0.9 }),
   potCream: mat(0xf1e6d6, { roughness: 0.9 }),
   soil: mat(0x3a2a1e, { roughness: 1 }),
@@ -34,7 +61,7 @@ const M = {
   metal: mat(0xb9b2a6, { roughness: 0.4, metalness: 0.7 }),
   brass: mat(0xd6a85c, { roughness: 0.35, metalness: 0.8 }),
   lampShade: mat(0xf6dcae, { roughness: 1, side: THREE.DoubleSide }),
-  curtain: mat(0xe9c8a6, { roughness: 1 }),
+  curtain: fabric(0xe9c8a6, { bumpScale: 0.02 }),
   guitar: mat(0xd28d44, { roughness: 0.5 }),
   guitarDark: mat(0x3b2415, { roughness: 0.6 }),
   speaker: mat(0x3a3330, { roughness: 0.8 }),
@@ -46,7 +73,7 @@ const M = {
 };
 
 function box(w, h, d, material, x = 0, y = 0, z = 0, { cast = true, receive = true, rounded = 0 } = {}) {
-  const geo = rounded > 0 ? new RoundedBoxGeometry(w, h, d, 3, rounded) : new THREE.BoxGeometry(w, h, d);
+  const geo = rounded > 0 ? new RoundedBoxGeometry(w, h, d, 5, rounded) : new THREE.BoxGeometry(w, h, d);
   const m = new THREE.Mesh(geo, material);
   m.position.set(x, y, z);
   m.castShadow = cast;
@@ -149,6 +176,64 @@ function buildShell() {
 
 // ---------------------------------------------------------------------------
 
+const smooth = (a, b, x) => {
+  const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+const puffNoise = (x, z) =>
+  (Math.sin(x * 1.7 + Math.sin(z * 1.3)) * Math.cos(z * 1.1 + Math.sin(x * 0.9))) * 0.5 + 0.5;
+
+/** A duvet draped over the mattress: puffy on top, falling over the sides and foot. */
+function buildDuvet(cx, cz, bw, bl, topY) {
+  const pad = 0.4;
+  const zStart = cz - bl / 2 + bl * 0.4;
+  const zEnd = cz + bl / 2 + 0.3;
+  const width = bw + pad * 2;
+  const length = zEnd - zStart;
+  const geo = new THREE.PlaneGeometry(width, length, 40, 48);
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(cx, 0, (zStart + zEnd) / 2);
+  const pos = geo.attributes.position;
+  const footEdge = cz + bl / 2 - 0.02;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i);
+    const z = pos.getZ(i);
+    const lx = x - cx;
+    const inX = bw / 2 - 0.03 - Math.abs(lx);
+    const inZ = footEdge - z;
+    const inside = Math.min(inX, inZ);
+    const n1 = puffNoise(lx * 2.4, z * 2.1);
+    const n2 = puffNoise(lx * 5.5 + 3.0, z * 4.8 - 1.0);
+    let y;
+    if (inside > 0) {
+      const puff = 0.1 + 0.07 * n1 + 0.03 * n2;
+      // thinner at the edge so it rolls over nicely
+      y = topY + 0.03 + puff * (0.45 + 0.55 * smooth(0, 0.35, inside));
+    } else {
+      const out = -inside;
+      y = topY + 0.06 - Math.min(out * 1.7, 0.62) + 0.015 * n2;
+      // keep the fabric hugging the mattress corner instead of poking through it
+      y -= 0.03 * smooth(0, 0.08, out);
+    }
+    // a folded-back look at the head end
+    const headFade = smooth(0, 0.3, z - zStart);
+    y = THREE.MathUtils.lerp(topY + 0.14, y, headFade);
+    pos.setY(i, y);
+  }
+  geo.computeVertexNormals();
+  const duvet = new THREE.Mesh(geo, M.blanket);
+  duvet.material.side = THREE.DoubleSide;
+  duvet.castShadow = true;
+  duvet.receiveShadow = true;
+  const g = new THREE.Group();
+  g.add(duvet);
+  // rolled-over top edge
+  const roll = cylinder(0.085, 0.085, bw + 0.12, M.blanketFold, cx, topY + 0.12, zStart + 0.02, 14);
+  roll.rotation.z = Math.PI / 2;
+  g.add(roll);
+  return g;
+}
+
 function buildBed() {
   const g = new THREE.Group();
   // frame along wall A corner (x -3.7..-1.5, z -3.7..-0.5)
@@ -158,17 +243,19 @@ function buildBed() {
     g.add(box(0.12, 0.3, 0.12, M.walnut, cx + dx * (bw / 2 - 0.1), 0.15, cz + dz * (bl / 2 - 0.1)));
   }
   g.add(box(bw + 0.1, 1.3, 0.12, M.walnut, cx, 1.0, cz - bl / 2 - 0.02)); // headboard
+  const mattressTop = 0.66 + 0.16;
   g.add(box(bw - 0.15, 0.32, bl - 0.15, M.mattress, cx, 0.66, cz, { rounded: 0.06 }));
-  // blanket covers the lower 2/3 of the bed and drapes over the sides
-  const blanket = box(bw + 0.05, 0.22, bl * 0.62, M.blanket, cx, 0.86, cz + bl * 0.19, { rounded: 0.08 });
-  g.add(blanket);
-  g.add(box(bw + 0.05, 0.12, 0.35, M.blanketFold, cx, 0.95, cz + bl * 0.19 - bl * 0.31 + 0.18, { rounded: 0.05 }));
-  // pillows
-  g.add(box(0.85, 0.22, 0.5, M.pillow, cx - 0.5, 0.95, cz - bl / 2 + 0.45, { rounded: 0.08 }));
-  g.add(box(0.85, 0.22, 0.5, M.pillow, cx + 0.5, 0.95, cz - bl / 2 + 0.45, { rounded: 0.08 }));
-  const accent = box(0.5, 0.18, 0.5, M.pillowAccent, cx, 0.98, cz - bl / 2 + 0.85, { rounded: 0.07 });
-  accent.rotation.y = 0.3;
-  g.add(accent);
+  g.add(buildDuvet(cx, cz, bw - 0.15, bl - 0.15, mattressTop));
+  // pillows, plump
+  const pillow = (x, z, w, d, material, rot = 0) => {
+    const pm = box(w, 0.24, d, material, x, mattressTop + 0.12, z, { rounded: 0.1 });
+    pm.rotation.y = rot;
+    pm.scale.set(1, 0.95, 1);
+    return pm;
+  };
+  g.add(pillow(cx - 0.5, cz - bl / 2 + 0.45, 0.85, 0.5, M.pillow));
+  g.add(pillow(cx + 0.5, cz - bl / 2 + 0.45, 0.85, 0.5, M.pillow));
+  g.add(pillow(cx, cz - bl / 2 + 0.85, 0.5, 0.5, M.pillowAccent, 0.3));
   return g;
 }
 

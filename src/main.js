@@ -4,6 +4,7 @@ import { Sky } from './sky.js';
 import { buildPlanet } from './planet.js';
 import { buildRoom } from './room.js';
 import { Fireflies } from './fireflies.js';
+import { createWind } from './wind.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam } from './time.js';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,14 @@ controls.maxZoom = 5;
 controls.minPolarAngle = THREE.MathUtils.degToRad(12);
 controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
 controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+{
+  // optional ?z= start zoom, handy for sharing a close-up
+  const z = Number(new URLSearchParams(location.search).get('z'));
+  if (z > 0) {
+    camera.zoom = THREE.MathUtils.clamp(z, controls.minZoom, controls.maxZoom);
+    camera.updateProjectionMatrix();
+  }
+}
 controls.update();
 
 const keysDown = new Set();
@@ -108,7 +117,8 @@ scene.add(camera); // needed so sprites parented to the camera render
 // World
 // ---------------------------------------------------------------------------
 const sky = new Sky(camera);
-scene.add(buildPlanet());
+const wind = createWind();
+scene.add(buildPlanet(wind));
 const room = buildRoom();
 scene.add(room.group);
 const fireflies = new Fireflies(110);
@@ -264,6 +274,7 @@ function frame() {
   applyLighting(state);
   sky.update(state, t, camera);
   room.update(state, dt);
+  wind.update(t);
   fireflies.update(t, state.night);
 
   renderer.clear();

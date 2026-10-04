@@ -206,3 +206,162 @@ export function makeVinylTexture(size = 256) {
   ctx.beginPath(); ctx.arc(cx, cx, cx * 0.035, 0, Math.PI * 2); ctx.fill();
   return srgb(new THREE.CanvasTexture(c));
 }
+
+// ---------------------------------------------------------------------------
+// Surface detail textures
+// ---------------------------------------------------------------------------
+
+function seeded(seed) {
+  let s = seed;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return s / 2147483647;
+  };
+}
+
+function repeat(tex, rx = 1, ry = rx) {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(rx, ry);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Grayscale woven-fabric bump map. */
+export function makeFabricBump(size = 256, threads = 48) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const rnd = seeded(11);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  const step = size / threads;
+  for (let i = 0; i < threads; i++) {
+    for (let j = 0; j < threads; j++) {
+      const over = (i + j) % 2 === 0;
+      const shade = 128 + (over ? 38 : -30) + (rnd() - 0.5) * 24;
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      if (over) ctx.fillRect(i * step, j * step + step * 0.12, step, step * 0.76);
+      else ctx.fillRect(i * step + step * 0.12, j * step, step * 0.76, step);
+    }
+  }
+  // soft noise so it does not read as a perfect grid
+  const img = ctx.getImageData(0, 0, size, size);
+  for (let k = 0; k < img.data.length; k += 4) {
+    const n = (rnd() - 0.5) * 18;
+    img.data[k] += n; img.data[k + 1] += n; img.data[k + 2] += n;
+  }
+  ctx.putImageData(img, 0, 0);
+  return repeat(new THREE.CanvasTexture(c), 3);
+}
+
+/** Chunky knit: rows of tilted stitches. Works as a colour map and bump map. */
+export function makeKnitTexture(baseHex = 0xd98c6b, size = 256, cols = 7, rows = 10) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const base = new THREE.Color(baseHex);
+  const dark = base.clone().multiplyScalar(0.72);
+  const light = base.clone().lerp(new THREE.Color(0xffffff), 0.22);
+  const css = (col) => `rgb(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)})`;
+  ctx.fillStyle = css(dark);
+  ctx.fillRect(0, 0, size, size);
+  const cw = size / cols;
+  const rh = size / rows;
+  for (let r = -1; r <= rows; r++) {
+    for (let col = -1; col <= cols; col++) {
+      const cx = col * cw + cw / 2;
+      const cy = r * rh + rh / 2;
+      for (const dir of [-1, 1]) {
+        ctx.save();
+        ctx.translate(cx + dir * cw * 0.22, cy);
+        ctx.rotate(dir * 0.55);
+        const g = ctx.createLinearGradient(0, -rh * 0.5, 0, rh * 0.5);
+        g.addColorStop(0, css(light));
+        g.addColorStop(0.55, css(base));
+        g.addColorStop(1, css(dark));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, cw * 0.2, rh * 0.52, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+  }
+  return repeat(srgb(new THREE.CanvasTexture(c)), 2, 3);
+}
+
+/** Subtle plaster bump for the walls. */
+export function makePlasterBump(size = 512) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const rnd = seeded(23);
+  ctx.fillStyle = '#808080';
+  ctx.fillRect(0, 0, size, size);
+  for (let i = 0; i < 2600; i++) {
+    const r = 2 + rnd() * 14;
+    const shade = 128 + (rnd() - 0.5) * 26;
+    ctx.fillStyle = `rgba(${shade},${shade},${shade},0.35)`;
+    ctx.beginPath();
+    ctx.arc(rnd() * size, rnd() * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return repeat(new THREE.CanvasTexture(c), 2);
+}
+
+/** Wood grain colour map. */
+export function makeWoodTexture(baseHex, darkHex, size = 512, seed = 5) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const rnd = seeded(seed);
+  const base = new THREE.Color(baseHex);
+  const dark = new THREE.Color(darkHex);
+  ctx.fillStyle = `#${base.getHexString()}`;
+  ctx.fillRect(0, 0, size, size);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < 70; i++) {
+    const y = rnd() * size;
+    const amp = 4 + rnd() * 12;
+    const freq = 0.004 + rnd() * 0.01;
+    const width = 1 + rnd() * 2.5;
+    tmp.copy(base).lerp(dark, 0.35 + rnd() * 0.5);
+    ctx.strokeStyle = `rgba(${Math.round(tmp.r * 255)},${Math.round(tmp.g * 255)},${Math.round(tmp.b * 255)},${0.35 + rnd() * 0.4})`;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (let x = 0; x <= size; x += 6) {
+      const yy = y + Math.sin(x * freq * 6.28 + i) * amp + Math.sin(x * 0.05 + i * 3) * 1.5;
+      if (x === 0) ctx.moveTo(x, yy);
+      else ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+  return repeat(srgb(new THREE.CanvasTexture(c)), 1);
+}
+
+/** A single leaf on a transparent background, tinted per instance. */
+export function makeLeafTexture(size = 128) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  const cx = size / 2;
+  ctx.fillStyle = '#d8d8d8';
+  ctx.beginPath();
+  ctx.moveTo(cx, size * 0.04);
+  ctx.bezierCurveTo(size * 0.98, size * 0.3, size * 0.9, size * 0.8, cx, size * 0.97);
+  ctx.bezierCurveTo(size * 0.1, size * 0.8, size * 0.02, size * 0.3, cx, size * 0.04);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(90,90,90,0.55)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(cx, size * 0.08);
+  ctx.lineTo(cx, size * 0.93);
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  for (let i = 1; i < 5; i++) {
+    const y = size * (0.2 + i * 0.15);
+    ctx.beginPath();
+    ctx.moveTo(cx, y);
+    ctx.lineTo(cx + size * 0.28, y - size * 0.1);
+    ctx.moveTo(cx, y);
+    ctx.lineTo(cx - size * 0.28, y - size * 0.1);
+    ctx.stroke();
+  }
+  return srgb(new THREE.CanvasTexture(c));
+}
