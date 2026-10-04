@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from './sky.js';
 import { buildPlanet } from './planet.js';
 import { buildRoom } from './room.js';
@@ -34,6 +35,71 @@ camera.position.set(
 );
 camera.lookAt(TARGET);
 camera.updateMatrixWorld();
+const HOME_POSITION = camera.position.clone();
+
+// ---------------------------------------------------------------------------
+// Controls: drag to orbit, scroll to zoom, right-drag / WASD / arrows to pan
+// ---------------------------------------------------------------------------
+const controls = new OrbitControls(camera, canvas);
+controls.target.copy(TARGET);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.rotateSpeed = 0.6;
+controls.zoomSpeed = 1.1;
+controls.panSpeed = 0.9;
+controls.screenSpacePanning = true;
+controls.minZoom = 0.45;
+controls.maxZoom = 5;
+controls.minPolarAngle = THREE.MathUtils.degToRad(12);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(82);
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.update();
+
+const keysDown = new Set();
+const PAN_KEYS = {
+  KeyW: [0, 1], ArrowUp: [0, 1],
+  KeyS: [0, -1], ArrowDown: [0, -1],
+  KeyA: [-1, 0], ArrowLeft: [-1, 0],
+  KeyD: [1, 0], ArrowRight: [1, 0],
+};
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  if (PAN_KEYS[e.code]) {
+    keysDown.add(e.code);
+    e.preventDefault();
+  }
+  if (e.code === 'KeyR') resetView();
+});
+window.addEventListener('keyup', (e) => keysDown.delete(e.code));
+window.addEventListener('blur', () => keysDown.clear());
+
+function resetView() {
+  camera.position.copy(HOME_POSITION);
+  camera.zoom = 1;
+  camera.updateProjectionMatrix();
+  controls.target.copy(TARGET);
+  controls.update();
+}
+
+const panRight = new THREE.Vector3();
+const panUp = new THREE.Vector3();
+const panDelta = new THREE.Vector3();
+function keyboardPan(dt) {
+  if (keysDown.size === 0) return;
+  panDelta.set(0, 0, 0);
+  panRight.setFromMatrixColumn(camera.matrixWorld, 0);
+  panUp.setFromMatrixColumn(camera.matrixWorld, 1);
+  for (const code of keysDown) {
+    const [x, y] = PAN_KEYS[code];
+    panDelta.addScaledVector(panRight, x).addScaledVector(panUp, y);
+  }
+  if (panDelta.lengthSq() === 0) return;
+  // pan speed in world units per second, scaled by the visible frustum height
+  const speed = (FRUSTUM_H / camera.zoom) * 0.6 * dt;
+  panDelta.normalize().multiplyScalar(speed);
+  camera.position.add(panDelta);
+  controls.target.add(panDelta);
+}
 
 const scene = new THREE.Scene();
 scene.add(camera); // needed so sprites parented to the camera render
@@ -139,7 +205,6 @@ function resize() {
   camera.top = halfH;
   camera.bottom = -halfH;
   camera.updateProjectionMatrix();
-  sky.setFrustum(halfW, halfH);
 }
 window.addEventListener('resize', resize);
 resize();
@@ -156,7 +221,6 @@ const clock = new THREE.Clock();
 let hudTimer = 1; // force a HUD refresh on the first frame
 
 function applyLighting(s) {
-  camera.updateMatrixWorld();
   camRight.setFromMatrixColumn(camera.matrixWorld, 0);
   camUp.setFromMatrixColumn(camera.matrixWorld, 1);
   camBack.setFromMatrixColumn(camera.matrixWorld, 2);
@@ -177,6 +241,8 @@ function applyLighting(s) {
   moon.castShadow = s.moonIntensity > 0.02;
 
   const day = THREE.MathUtils.smoothstep(s.elev, -0.1, 0.3);
+  fill.position.copy(camera.position);
+  fill.target.position.copy(controls.target);
   fill.intensity = 0.08 + 0.85 * day;
   fill.color.copy(FILL_NIGHT).lerp(FILL_DAY, day);
 
@@ -191,8 +257,12 @@ function frame() {
   const hours = currentHours();
   computeSky(hours, state);
 
+  keyboardPan(dt);
+  controls.update();
+  camera.updateMatrixWorld();
+
   applyLighting(state);
-  sky.update(state, t);
+  sky.update(state, t, camera);
   room.update(state, dt);
   fireflies.update(t, state.night);
 

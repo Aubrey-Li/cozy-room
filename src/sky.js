@@ -105,6 +105,7 @@ export class Sky {
     this.moon = new THREE.Sprite(spriteMat(makeMoonTexture()));
     this.moon.scale.setScalar(2.6);
 
+    this.baseScale = new Map([[this.sun, 2.4], [this.sunGlow, 9], [this.moon, 2.6]]);
     for (const s of [this.sunGlow, this.sun, this.moon]) {
       s.renderOrder = -10;
       camera.add(s);
@@ -115,11 +116,18 @@ export class Sky {
     this.depth = -300;
   }
 
-  setFrustum(halfW, halfH) {
+  /** Read the visible half-extents (in world units at the camera) including zoom. */
+  syncFrustum(camera) {
+    const halfW = (camera.right - camera.left) / 2 / camera.zoom;
+    const halfH = (camera.top - camera.bottom) / 2 / camera.zoom;
     this.halfW = halfW;
     this.halfH = halfH;
     this.uniforms.uAspect.value = halfW / halfH;
-    this.orbitRadius = Math.min(halfH * 1.1, halfW * 0.82);
+    // keep the sun's orbit at a fixed place on screen regardless of zoom
+    const k = 1 / camera.zoom;
+    this.orbitRadius = Math.min(11 * k, halfW * 0.82);
+    this.orbitCenter.set(0, -2.5 * k);
+    for (const [sprite, base] of this.baseScale) sprite.scale.setScalar(base * k);
   }
 
   /** Where the sun currently is, in camera-local XY. */
@@ -130,7 +138,8 @@ export class Sky {
     );
   }
 
-  update(state, time) {
+  update(state, time, camera) {
+    this.syncFrustum(camera);
     const u = this.uniforms;
     u.uTop.value.copy(state.sky.top);
     u.uHorizon.value.copy(state.sky.horizon);

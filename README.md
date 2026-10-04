@@ -19,6 +19,7 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 
 - The clock in the corner shows the local time the scene is rendering.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
+- Drag to orbit around the planet, scroll or pinch to zoom, right-drag (or `W A S D` / arrow keys) to pan. Press `R` to reset the view.
 - Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`.
 
 ## Layout
