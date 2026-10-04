@@ -181,7 +181,6 @@ const clockEl = document.getElementById('clock');
 const phaseEl = document.getElementById('phase');
 const slider = document.getElementById('time-slider');
 const liveBtn = document.getElementById('live-btn');
-const liveDot = document.getElementById('live-dot');
 
 const params = new URLSearchParams(location.search);
 let override = parseTimeParam(params.get('t'));
@@ -189,7 +188,6 @@ let live = override === null;
 
 function setLive(on) {
   live = on;
-  liveDot.classList.toggle('live', on);
   liveBtn.disabled = on;
   if (on) override = null;
 }

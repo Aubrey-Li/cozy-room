@@ -67,20 +67,6 @@ html, body {
   color: var(--ink-dim);
 }
 
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #777;
-  flex: none;
-  position: relative;
-  top: -1px;
-}
-.dot.live {
-  background: #8ee28a;
-  box-shadow: 0 0 10px rgba(142, 226, 138, 0.8);
-}
-
 .controls {
   display: flex;
   align-items: center;
