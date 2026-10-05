@@ -210,10 +210,8 @@ const hudCard = document.getElementById('hud-card');
 const hudToggle = document.getElementById('hud-toggle');
 const hudSummary = document.getElementById('hud-summary');
 const hintEl = document.getElementById('hint');
-const coarse = window.matchMedia('(pointer: coarse)').matches;
-hintEl.textContent = coarse
-  ? 'drag to orbit · pinch to zoom · two-finger drag to pan · tap the record player for music'
-  : 'drag to orbit · scroll to zoom · right-drag or WASD to pan · R resets · click the record player for music';
+// keep it light: the room is for discovering, not reading instructions
+hintEl.textContent = 'feel free to explore this little world of mine';
 
 function readPref(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -247,15 +245,24 @@ const music = createMusicPanel({ onPlayingChange: (on) => room.setPlaying(on) })
 const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
 
-function hitsRecordPlayer(clientX, clientY) {
+// things in the room you can click, checked against whatever the ray hits first
+const clickables = [
+  { roots: [room.recordPlayer], action: () => music.open() },
+  { roots: room.windowTargets, action: () => room.toggleWindow() },
+];
+
+function pick(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   pointerNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
   raycaster.setFromCamera(pointerNdc, camera);
-  // only the room can sit between the camera and the record player, so skip the meadow
-  const hit = raycaster.intersectObject(room.group, true).find((h) => h.object.visible && !h.object.isLight);
-  if (!hit) return false;
-  for (let o = hit.object; o; o = o.parent) if (o === room.recordPlayer) return true;
-  return false;
+  // only the room can sit between the camera and these objects, so skip the meadow
+  const hit = raycaster.intersectObject(room.group, true).find((h) => h.object.visible && !h.object.isLight && !h.object.isSprite);
+  if (!hit) return null;
+  for (let o = hit.object; o; o = o.parent) {
+    const c = clickables.find((entry) => entry.roots.includes(o));
+    if (c) return c;
+  }
+  return null;
 }
 
 // a tap is a short press that barely moves, so orbit drags never open the panel
@@ -270,10 +277,10 @@ canvas.addEventListener('pointerup', (e) => {
   // event timestamps mark when the touch happened, so a slow frame in between cannot turn a tap into a long press
   const quick = e.timeStamp - press.t < 600;
   press = null;
-  if (moved < 6 && quick && hitsRecordPlayer(e.clientX, e.clientY)) music.open();
+  if (moved < 6 && quick) pick(e.clientX, e.clientY)?.action();
 });
 
-// pointer cursor when hovering the record player (mouse only, at most once per frame)
+// pointer cursor when hovering something clickable (mouse only, at most once per frame)
 let hoverQueued = null;
 canvas.addEventListener('pointermove', (e) => {
   if (e.pointerType !== 'mouse' || e.buttons) return;
@@ -286,7 +293,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 
 function updateHover() {
   if (!hoverQueued) return;
-  const over = hitsRecordPlayer(hoverQueued.x, hoverQueued.y);
+  const over = Boolean(pick(hoverQueued.x, hoverQueued.y));
   canvas.style.cursor = over ? 'pointer' : '';
   hoverQueued = null;
 }

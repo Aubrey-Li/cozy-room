@@ -3,7 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } from './foliage.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
-  makeFabricBump, makePlasterBump, makeWoodTexture,
+  makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture,
 } from './textures.js';
 
 // Room footprint: x in [-4, 4], z in [-4, 4]. Floor top at y = 0.
@@ -90,6 +90,76 @@ function cylinder(rt, rb, h, material, x = 0, y = 0, z = 0, seg = 16) {
 
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Sheer curtains: a pleated cloth mesh reshaped each frame. When the window
+// is open the wind billows the lower part into the room and ripples it.
+
+const linen = makeLinenTexture();
+const curtainMat = new THREE.MeshStandardMaterial({
+  color: 0xfbf8f1,
+  map: linen,
+  alphaMap: linen,
+  transparent: true,
+  opacity: 0.82,
+  roughness: 0.95,
+  side: THREE.DoubleSide,
+  depthWrite: false,
+  emissive: 0xfff4e2,
+  emissiveIntensity: 0.06,
+});
+
+function buildCurtain(cx, topY, z, width, height, towardWindow) {
+  const segX = 28, segY = 44;
+  const geo = new THREE.PlaneGeometry(width, height, segX, segY);
+  geo.translate(cx, topY - height / 2, z);
+  const pos = geo.attributes.position;
+  const rest = Float32Array.from(pos.array);
+  const pleats = Math.max(4, Math.round(width * 11));
+  // pleat profile: soft sine folds, a little deeper toward the bottom
+  for (let i = 0; i < pos.count; i++) {
+    const x = rest[i * 3] - (cx - width / 2);
+    const y = rest[i * 3 + 1];
+    const down = (topY - y) / height;
+    rest[i * 3 + 2] = z + Math.sin((x / width) * Math.PI * 2 * pleats) * (0.035 + 0.02 * down);
+  }
+  pos.array.set(rest);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, curtainMat);
+  mesh.receiveShadow = true;
+  mesh.renderOrder = 2;
+
+  /** wind: 0 = still air, 1 = window wide open */
+  function update(t, wind) {
+    for (let i = 0; i < pos.count; i++) {
+      const rx = rest[i * 3], ry = rest[i * 3 + 1], rz = rest[i * 3 + 2];
+      const down = (topY - ry) / height;          // 0 at the rod, 1 at the hem
+      const w = Math.pow(down, 1.35);
+      const u = (rx - cx) / width;                 // -0.5..0.5 across the panel
+      // a slow breathing sway even with the window shut
+      let dz = 0.012 * w * Math.sin(t * 0.7 + u * 2);
+      let dx = 0;
+      let dy = 0;
+      if (wind > 0.001) {
+        const gust = 0.75 + 0.25 * Math.sin(t * 0.9) + 0.12 * Math.sin(t * 2.3 + 1.7);
+        // billow into the room, more on the edge nearest the window
+        const edge = 0.75 + 0.35 * (u * towardWindow + 0.5);
+        dz += wind * w * gust * edge * (0.55 + 0.12 * Math.sin(t * 1.6 + ry * 1.8));
+        // travelling ripples through the cloth
+        dz += wind * w * 0.07 * Math.sin(t * 5.2 - ry * 4.0 + u * 9.0);
+        // drawn slightly toward the opening by the incoming air, never out over the furniture
+        dx += wind * w * (0.02 * Math.sin(t * 2.1 + ry * 2.5) + 0.02 * towardWindow * gust);
+        dy += wind * w * w * 0.12 * gust; // the hem lifts as it fills with air
+      }
+      pos.setXYZ(i, rx + dx, ry + dy, rz + dz);
+    }
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    geo.computeBoundingSphere();
+  }
+  update(0, 0);
+  return { mesh, update };
+}
+
 function buildShell() {
   const g = new THREE.Group();
 
@@ -134,10 +204,7 @@ function buildShell() {
   g.add(box(ww + fw * 2, fw, WALL_T + 0.1, frameMat, wcx, win.y0 - fw / 2, wz));
   g.add(box(fw, wh, WALL_T + 0.1, frameMat, win.x0 - fw / 2, wcy, wz));
   g.add(box(fw, wh, WALL_T + 0.1, frameMat, win.x1 + fw / 2, wcy, wz));
-  g.add(box(0.05, wh, 0.05, frameMat, wcx, wcy, wz));
-  g.add(box(ww, 0.05, 0.05, frameMat, wcx, wcy, wz));
-
-  // glass
+  // glass, shared by both sashes; glows warm at night
   const glassMat = new THREE.MeshStandardMaterial({
     color: 0xbfe3ff,
     transparent: true,
@@ -149,18 +216,47 @@ function buildShell() {
     side: THREE.DoubleSide,
     depthWrite: false,
   });
-  const glass = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), glassMat);
-  glass.position.set(wcx, wcy, wz);
-  g.add(glass);
+
+  // two casement sashes hinged at the outer edges, swinging into the room
+  const sashW = ww / 2;
+  const sb = 0.05; // sash bar thickness
+  const makeSash = (hingeX, dir) => {
+    const pivot = new THREE.Group();
+    pivot.position.set(hingeX, wcy, wz + 0.02);
+    const cx = dir * sashW / 2;
+    pivot.add(box(sashW, sb, 0.06, frameMat, cx, wh / 2 - sb / 2, 0));
+    pivot.add(box(sashW, sb, 0.06, frameMat, cx, -wh / 2 + sb / 2, 0));
+    pivot.add(box(sb, wh, 0.06, frameMat, dir * sb / 2, 0, 0));
+    pivot.add(box(sb, wh, 0.06, frameMat, dir * (sashW - sb / 2), 0, 0));
+    pivot.add(box(sashW - sb, 0.035, 0.04, frameMat, cx, 0, 0)); // muntin
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(sashW - sb, wh - sb), glassMat);
+    pane.position.set(cx, 0, 0);
+    pivot.add(pane);
+    // small brass handle on the free edge
+    pivot.add(box(0.025, 0.12, 0.03, M.brass, dir * (sashW - sb - 0.03), 0, 0.05));
+    return pivot;
+  };
+  const sashL = makeSash(win.x0, 1);
+  const sashR = makeSash(win.x1, -1);
+  g.add(sashL, sashR);
+
+  // an invisible pane over the opening so the window stays clickable when open
+  const hitPane = new THREE.Mesh(new THREE.PlaneGeometry(ww, wh), new THREE.MeshBasicMaterial({ visible: false }));
+  hitPane.position.set(wcx, wcy, wz);
+  g.add(hitPane);
 
   // sill
   g.add(box(ww + 0.5, 0.08, 0.5, frameMat, wcx, win.y0 - fw - 0.04, wz + 0.2));
 
-  // curtains
-  for (const x of [win.x0 - 0.3, win.x1 + 0.3]) {
-    const c = box(0.42, wh + 0.75, 0.14, M.curtain, x, wcy + 0.15, wz + 0.26, { rounded: 0.05 });
-    g.add(c);
-  }
+  // sheer linen curtains hanging from the rod, beside the opening
+  const rodY = win.y1 + 0.45;
+  const curtains = [
+    // the left panel is narrower so it clears the bookshelf
+    buildCurtain(win.x0 - 0.27, rodY, wz + 0.26, 0.4, rodY - (win.y0 - 0.42), 1),
+    buildCurtain(win.x1 + 0.3, rodY, wz + 0.26, 0.5, rodY - (win.y0 - 0.42), -1),
+  ];
+  for (const c of curtains) g.add(c.mesh);
+
   // curtain rod
   const rod = cylinder(0.025, 0.025, ww + 1.2, M.brass, wcx, win.y1 + 0.45, wz + 0.26);
   rod.rotation.z = Math.PI / 2;
@@ -170,7 +266,7 @@ function buildShell() {
   g.add(box(W * 2, 0.18, 0.06, M.trim, 0, 0.09, -W + 0.18));
   g.add(box(0.06, 0.18, W * 2, M.trim, -W + 0.18, 0.09, 0));
 
-  return { group: g, glassMat };
+  return { group: g, glassMat, sashes: [sashL, sashR], curtains, hitPane };
 }
 
 // ---------------------------------------------------------------------------
@@ -1015,9 +1111,9 @@ export function buildRoom() {
   group.add(buildBookshelf());
   const rp = buildRecordPlayer();
   group.add(rp.group);
-  group.add(buildTallPlant(3.5, -3.3));
+  group.add(buildTallPlant(3.5, -2.55));
   group.add(buildMonstera(-3.3, 3.2));
-  group.add(buildSucculent(2.55, 1.92, -3.66, 0.9));
+  group.add(buildSucculent(2.15, 0.82, -3.38, 0.75)); // on the record cabinet, clear of the sashes
   group.add(buildGallery());
   const sl = buildStringLights();
   group.add(sl.group);
@@ -1042,9 +1138,23 @@ export function buildRoom() {
     const targetArm = player.playing ? ARM_PLAY : ARM_REST;
     rp.arm.rotation.y += (targetArm - rp.arm.rotation.y) * (1 - Math.exp(-dt * 3));
     notes.update(dt, player.playing, player.viewScale);
+
+    // sashes swing on an eased curve; the breeze builds once they are open
+    const target = windowState.open ? 1 : 0;
+    windowState.amount += (target - windowState.amount) * (1 - Math.exp(-dt * 3.2));
+    const ease = windowState.amount * windowState.amount * (3 - 2 * windowState.amount);
+    shell.sashes[0].rotation.y = -SASH_OPEN * ease;
+    shell.sashes[1].rotation.y = SASH_OPEN * ease;
+    const windTarget = windowState.open ? 1 : 0;
+    windowState.wind += (windTarget - windowState.wind) * (1 - Math.exp(-dt * (windowState.open ? 0.9 : 1.6)));
+    elapsed += dt;
+    for (const c of shell.curtains) c.update(elapsed, windowState.wind);
   }
+  let elapsed = 0;
 
   const player = { playing: false, spin: 0, viewScale: 1 };
+  const windowState = { open: false, amount: 0, wind: 0 };
+  const SASH_OPEN = THREE.MathUtils.degToRad(72);
   rp.arm.rotation.y = ARM_REST;
   const notes = createNotes(rp.vinyl.position.clone());
   group.add(notes.group);
@@ -1053,6 +1163,15 @@ export function buildRoom() {
     group,
     update,
     recordPlayer: rp.group,
+    // the window frame, sashes, glass and curtains all respond to clicks
+    windowTargets: [shell.hitPane, ...shell.sashes, ...shell.curtains.map((c) => c.mesh)],
+    toggleWindow() {
+      windowState.open = !windowState.open;
+      return windowState.open;
+    },
+    get windowOpen() {
+      return windowState.open;
+    },
     setPlaying(on) {
       player.playing = on;
     },

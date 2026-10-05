@@ -365,3 +365,32 @@ export function makeLeafTexture(size = 128) {
   }
   return srgb(new THREE.CanvasTexture(c));
 }
+
+/** Sheer linen: an irregular open weave with slubs. Used as colour and alpha map. */
+export function makeLinenTexture(size = 256) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const rnd = seeded(31);
+  ctx.fillStyle = 'rgb(205,205,205)';
+  ctx.fillRect(0, 0, size, size);
+  // warp and weft threads with uneven thickness and brightness
+  for (let pass = 0; pass < 2; pass++) {
+    let p = 0;
+    while (p < size) {
+      const w = 1 + rnd() * 1.6;
+      const shade = 215 + Math.floor(rnd() * 40);
+      ctx.fillStyle = `rgba(${shade},${shade},${shade},${0.55 + rnd() * 0.4})`;
+      if (pass === 0) ctx.fillRect(0, p, size, w);
+      else ctx.fillRect(p, 0, w, size);
+      // occasional slub: a short thicker run in the thread
+      if (rnd() < 0.25) {
+        const at = rnd() * size, len = 6 + rnd() * 18;
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        if (pass === 0) ctx.fillRect(at, p - 0.5, len, w + 1.2);
+        else ctx.fillRect(p - 0.5, at, w + 1.2, len);
+      }
+      p += w + 0.8 + rnd() * 1.4;
+    }
+  }
+  return repeat(srgb(new THREE.CanvasTexture(c)), 3, 5);
+}

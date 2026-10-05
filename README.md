@@ -18,6 +18,7 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 ## Controls
 
 - The clock in the corner shows the local time the scene is rendering. Tap it (or the arrow) to collapse the panel; it starts collapsed on small screens.
+- Click or tap the window to swing it open; the sheer linen curtains billow into the room with the breeze. Click again to close it.
 - Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; the arrow (or the panel title) minimizes it to a slim now-playing bar with play/pause while the song keeps going, and closing the panel stops the music. Songs stream through YouTube's embedded player, shown in the expanded panel and hidden in the mini bar. YouTube's API policies ask for a visible player of at least 200x200 while playing, so hiding it carries some risk of YouTube restricting playback.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
 - Drag to orbit around the planet, scroll or pinch to zoom, right-drag (or `W A S D` / arrow keys) to pan. Press `R` to reset the view.
