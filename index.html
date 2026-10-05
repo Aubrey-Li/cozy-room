@@ -43,10 +43,19 @@
 
   <section id="music" class="card music" hidden aria-label="Record player">
     <header class="music-head">
-      <div class="music-title"><span class="note" aria-hidden="true">♪</span> On the turntable</div>
-      <button id="music-close" class="icon-btn" type="button" aria-label="Stop and close" title="Stop and close">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <button id="music-summary" class="music-summary" type="button" aria-controls="music-list" title="Show or hide the song list">
+        <span class="note" aria-hidden="true">♪</span>
+        <span class="music-heading">On the turntable</span>
+        <span class="now" id="music-now"><span class="now-title"></span><span class="now-artist"></span></span>
       </button>
+      <div class="head-actions">
+        <button id="music-collapse" class="icon-btn" type="button" aria-expanded="true" aria-controls="music-list" aria-label="Minimize player" title="Minimize">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button id="music-close" class="icon-btn" type="button" aria-label="Stop and close" title="Stop and close">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
     </header>
     <ul id="music-list" class="tracks"></ul>
     <p id="music-status" class="music-status" hidden></p>

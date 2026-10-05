@@ -40,6 +40,10 @@ export function createMusicPanel({ onPlayingChange }) {
   const status = document.getElementById('music-status');
   const closeBtn = document.getElementById('music-close');
   const playerHost = document.getElementById('music-player');
+  const collapseBtn = document.getElementById('music-collapse');
+  const summaryBtn = document.getElementById('music-summary');
+  const nowTitle = panel.querySelector('.now-title');
+  const nowArtist = panel.querySelector('.now-artist');
 
   let player = null;
   let playerReady = null;
@@ -81,7 +85,23 @@ export function createMusicPanel({ onPlayingChange }) {
       b.classList.toggle('current', i === current);
       b.setAttribute('aria-pressed', String(i === current));
     });
+    const song = SONGS[current];
+    panel.classList.toggle('has-song', Boolean(song));
+    nowTitle.textContent = song ? song.title : '';
+    nowArtist.textContent = song ? song.artist : '';
   }
+
+  // minimize to a mini player; the video stays visible as YouTube requires
+  function setMini(mini) {
+    panel.classList.toggle('mini', mini);
+    collapseBtn.setAttribute('aria-expanded', String(!mini));
+    summaryBtn.setAttribute('aria-expanded', String(!mini));
+    collapseBtn.setAttribute('aria-label', mini ? 'Show song list' : 'Minimize player');
+    collapseBtn.title = mini ? 'Show song list' : 'Minimize';
+  }
+  const toggleMini = () => setMini(!panel.classList.contains('mini'));
+  collapseBtn.addEventListener('click', toggleMini);
+  summaryBtn.addEventListener('click', toggleMini);
 
   function ensurePlayer(videoId) {
     if (playerReady) return playerReady;
@@ -146,6 +166,9 @@ export function createMusicPanel({ onPlayingChange }) {
   }
 
   function open() {
+    // clicking the record player always brings up the full song list
+    setMini(false);
+    if (!panel.hidden) return;
     panel.hidden = false;
     // warm the API so the first song starts quickly
     loadYouTubeAPI().catch(() => {});
@@ -174,5 +197,9 @@ export function createMusicPanel({ onPlayingChange }) {
     get playing() {
       return playing;
     },
+    get mini() {
+      return panel.classList.contains('mini');
+    },
+    setMini,
   };
 }

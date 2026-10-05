@@ -18,7 +18,7 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 ## Controls
 
 - The clock in the corner shows the local time the scene is rendering. Tap it (or the arrow) to collapse the panel; it starts collapsed on small screens.
-- Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; closing the panel stops the music. Songs stream through YouTube's embedded player, which has to stay visible while it plays.
+- Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; the arrow (or the panel title) minimizes it to a mini player in the corner while the song keeps going, and closing the panel stops the music. Songs stream through YouTube's embedded player, which has to stay visible while it plays.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
 - Drag to orbit around the planet, scroll or pinch to zoom, right-drag (or `W A S D` / arrow keys) to pan. Press `R` to reset the view.
 - Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`. Add `?z=2.5` to start zoomed in, and `?target=x,y,z` to centre the view on a point.

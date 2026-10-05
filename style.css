@@ -164,13 +164,38 @@ button[disabled] { opacity: 0.45; cursor: default; }
   justify-content: space-between;
   margin-bottom: 10px;
 }
-.music-title {
+.music-summary {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  cursor: pointer;
+  border-radius: 8px;
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-dim);
 }
-.music-title .note { color: var(--accent); }
+.music-summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.music-summary .note { color: var(--accent); }
+.head-actions { display: flex; gap: 6px; flex: none; }
+#music-collapse svg { transition: transform 0.25s ease; }
+
+/* now-playing label only shows in the mini player */
+.now { display: none; flex-direction: column; min-width: 0; text-transform: none; letter-spacing: 0; }
+.now-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-artist { font-size: 11px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* mini player: just the song name and a 200px square video (YouTube's minimum visible size) */
+.music.mini { width: auto; padding: 10px; }
+.music.mini .music-head { width: 200px; margin-bottom: 0; gap: 8px; }
+.music.mini .tracks { display: none; }
+.music.mini.has-song .music-heading { display: none; }
+.music.mini.has-song .now { display: flex; }
+.music.mini .player { width: 200px; height: 200px; margin-top: 8px; }
+.music.mini #music-collapse svg { transform: rotate(180deg); }
 
 .tracks {
   list-style: none;
@@ -294,4 +319,7 @@ button[disabled] { opacity: 0.45; cursor: default; }
   .meta .artist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .eq { position: absolute; top: 10px; right: 8px; }
   .player { height: 200px; margin-top: 10px; }
+  /* the mini player tucks into the corner instead of spanning the screen */
+  .music.mini { left: auto; width: auto; max-height: none; padding: 10px; }
+  .music.mini .player { margin-top: 8px; }
 }
