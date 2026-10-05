@@ -933,7 +933,7 @@ function createNotes(origin) {
   const tints = [0xffd27a, 0xffb85c, 0xfff0c8, 0xff9f8a];
   const group = new THREE.Group();
   const pool = [];
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 26; i++) {
     const mat = new THREE.SpriteMaterial({
       map: textures[i % textures.length],
       color: tints[i % tints.length],
@@ -954,11 +954,12 @@ function createNotes(origin) {
     const n = pool.find((p) => !p.sprite.visible);
     if (!n) return;
     n.age = 0;
-    n.life = 2.6 + Math.random() * 1.2;
-    n.drift = (Math.random() - 0.5) * 0.5; // sideways travel over the note's life
+    n.life = 5.5 + Math.random() * 2;
+    n.drift = (Math.random() - 0.5) * 1.1; // sideways travel over the note's life
     n.sway = 0.06 + Math.random() * 0.06;
     n.phase = Math.random() * Math.PI * 2;
-    n.size = 0.36 + Math.random() * 0.16;
+    n.size = 0.22 + Math.random() * 0.1;
+    n.height = 4.4 + Math.random() * 1.2; // up past the walls into the sky
     n.x0 = origin.x + (Math.random() - 0.5) * 0.4;
     n.z0 = origin.z + (Math.random() - 0.5) * 0.3 + 0.1;
     n.sprite.visible = true;
@@ -982,19 +983,20 @@ function createNotes(origin) {
         n.sprite.material.opacity = 0;
         continue;
       }
-      const rise = 1.5 * (1 - (1 - t) * (1 - t)); // eases out as it floats up
+      // quick lift off the platter, slowing to a drift as it reaches the sky
+      const rise = n.height * (1 - Math.pow(1 - t, 3));
       n.sprite.position.set(
-        n.x0 + n.drift * t + Math.sin(n.age * 2.4 + n.phase) * n.sway,
-        origin.y + 0.1 + rise * Math.sqrt(viewScale),
+        n.x0 + n.drift * t + Math.sin(n.age * 1.6 + n.phase) * n.sway,
+        origin.y + 0.1 + rise,
         n.z0 + n.drift * 0.4 * t,
       );
       // pop in, hold, fade out near the top
-      const fadeIn = Math.min(1, t / 0.12);
-      const fadeOut = 1 - Math.max(0, (t - 0.6) / 0.4);
+      const fadeIn = Math.min(1, t / 0.06);
+      const fadeOut = 1 - Math.max(0, (t - 0.62) / 0.38);
       n.sprite.material.opacity = 0.95 * fadeIn * fadeOut;
       const s = n.size * viewScale * (0.6 + 0.4 * fadeIn);
       n.sprite.scale.set(s, s, s);
-      n.sprite.material.rotation = Math.sin(n.age * 1.8 + n.phase) * 0.25;
+      n.sprite.material.rotation = Math.sin(n.age * 1.3 + n.phase) * 0.25;
     }
   }
 
