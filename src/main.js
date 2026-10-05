@@ -5,6 +5,7 @@ import { buildPlanet } from './planet.js';
 import { buildRoom } from './room.js';
 import { Fireflies } from './fireflies.js';
 import { createWind } from './wind.js';
+import { createMusicPanel } from './music.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam } from './time.js';
 
 // ---------------------------------------------------------------------------
@@ -202,8 +203,92 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') setLive(true);
 });
 
+// ---------------------------------------------------------------------------
+// HUD: collapsible, collapsed by default on small screens
+// ---------------------------------------------------------------------------
+const hudCard = document.getElementById('hud-card');
+const hudToggle = document.getElementById('hud-toggle');
+const hudSummary = document.getElementById('hud-summary');
+const hintEl = document.getElementById('hint');
+const coarse = window.matchMedia('(pointer: coarse)').matches;
+hintEl.textContent = coarse
+  ? 'drag to orbit · pinch to zoom · two-finger drag to pan · tap the record player for music'
+  : 'drag to orbit · scroll to zoom · right-drag or WASD to pan · R resets · click the record player for music';
+
+function readPref(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+function writePref(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* storage unavailable */ }
+}
+
+function setCollapsed(collapsed, remember = true) {
+  hudCard.classList.toggle('collapsed', collapsed);
+  for (const el of [hudToggle, hudSummary]) el.setAttribute('aria-expanded', String(!collapsed));
+  hudToggle.setAttribute('aria-label', collapsed ? 'Show controls' : 'Hide controls');
+  if (remember) writePref('cozy-room:hud-collapsed', collapsed ? '1' : '0');
+}
+{
+  const saved = readPref('cozy-room:hud-collapsed');
+  const small = window.matchMedia('(max-width: 600px)').matches;
+  setCollapsed(saved === null ? small : saved === '1', false);
+}
+hudToggle.addEventListener('click', () => setCollapsed(!hudCard.classList.contains('collapsed')));
+hudSummary.addEventListener('click', () => setCollapsed(!hudCard.classList.contains('collapsed')));
+
 function currentHours() {
   return live ? localHours() : override;
+}
+
+// ---------------------------------------------------------------------------
+// Record player: click or tap it to open the song list
+// ---------------------------------------------------------------------------
+const music = createMusicPanel({ onPlayingChange: (on) => room.setPlaying(on) });
+const raycaster = new THREE.Raycaster();
+const pointerNdc = new THREE.Vector2();
+
+function hitsRecordPlayer(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  pointerNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(pointerNdc, camera);
+  // only the room can sit between the camera and the record player, so skip the meadow
+  const hit = raycaster.intersectObject(room.group, true).find((h) => h.object.visible && !h.object.isLight);
+  if (!hit) return false;
+  for (let o = hit.object; o; o = o.parent) if (o === room.recordPlayer) return true;
+  return false;
+}
+
+// a tap is a short press that barely moves, so orbit drags never open the panel
+let press = null;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0) return;
+  press = { x: e.clientX, y: e.clientY, t: e.timeStamp };
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (!press) return;
+  const moved = Math.hypot(e.clientX - press.x, e.clientY - press.y);
+  // event timestamps mark when the touch happened, so a slow frame in between cannot turn a tap into a long press
+  const quick = e.timeStamp - press.t < 600;
+  press = null;
+  if (moved < 6 && quick && hitsRecordPlayer(e.clientX, e.clientY)) music.open();
+});
+
+// pointer cursor when hovering the record player (mouse only, at most once per frame)
+let hoverQueued = null;
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse' || e.buttons) return;
+  hoverQueued = { x: e.clientX, y: e.clientY };
+});
+// ?debug exposes a few handles for automated checks
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__cozy = { camera, room, music, THREE };
+}
+
+function updateHover() {
+  if (!hoverQueued) return;
+  const over = hitsRecordPlayer(hoverQueued.x, hoverQueued.y);
+  canvas.style.cursor = over ? 'pointer' : '';
+  hoverQueued = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -275,10 +360,12 @@ function frame() {
 
   keyboardPan(dt);
   controls.update();
+  updateHover();
   camera.updateMatrixWorld();
 
   applyLighting(state);
   sky.update(state, t, camera);
+  room.setViewZoom(camera.zoom);
   room.update(state, dt);
   wind.update(t);
   fireflies.update(t, state.night);

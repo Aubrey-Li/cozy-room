@@ -30,6 +30,8 @@ html, body {
   position: fixed;
   top: calc(16px + env(safe-area-inset-top, 0px));
   left: calc(16px + env(safe-area-inset-left, 0px));
+  display: flex;
+  align-items: flex-start;
   pointer-events: none;
 }
 
@@ -47,9 +49,40 @@ html, body {
 
 .row {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
+
+/* the clock doubles as the expand/collapse target */
+.summary {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.summary:focus-visible,
+.icon-btn:focus-visible,
+.track:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: none;
+  border-radius: 50%;
+}
+#hud-toggle svg { transition: transform 0.25s ease; }
+
+.card.collapsed #hud-body { display: none; }
+.card.collapsed { min-width: 0; padding-bottom: 12px; }
+.card.collapsed #hud-toggle svg { transform: rotate(180deg); }
 
 #clock {
   font-size: 34px;
@@ -61,6 +94,7 @@ html, body {
 
 #phase {
   margin-top: 6px;
+  white-space: nowrap;
   font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -100,10 +134,164 @@ button {
   max-width: 230px;
 }
 
-button:hover { background: rgba(255, 255, 255, 0.16); }
+@media (hover: hover) {
+  button:hover { background: rgba(255, 255, 255, 0.16); }
+  .summary:hover { background: none; }
+  .track:hover { background: rgba(255, 255, 255, 0.08); }
+}
 button[disabled] { opacity: 0.45; cursor: default; }
 
-@media (max-width: 480px) {
-  .card { min-width: 160px; padding: 12px 14px 10px; }
-  #clock { font-size: 28px; }
+/* ---------------------------------------------------------------------------
+   Record player panel
+--------------------------------------------------------------------------- */
+.music {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(380px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  overflow: auto;
+  padding: 14px;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.2s ease, transform 0.25s ease;
+}
+.music.open { opacity: 1; transform: none; }
+
+.music-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.music-title {
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.music-title .note { color: var(--accent); }
+
+.tracks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.track {
+  all: unset;
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.track.current {
+  background: rgba(255, 194, 122, 0.12);
+  border-color: rgba(255, 194, 122, 0.35);
+}
+.sleeve {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 5px;
+  background: var(--sleeve);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+.sleeve .disc {
+  position: absolute;
+  top: 3px;
+  left: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--sleeve) 0 18%, #111 19% 100%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.06) inset;
+  transition: transform 0.3s ease;
+}
+.track.current .disc { transform: translateX(6px); }
+.music.is-playing .track.current .disc { animation: spin 1.8s linear infinite; transform: translateX(6px); }
+@keyframes spin { to { transform: translateX(6px) rotate(360deg); } }
+
+.meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.meta .title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta .artist { font-size: 12px; color: var(--ink-dim); }
+
+.eq { display: flex; align-items: flex-end; gap: 2px; height: 14px; opacity: 0; }
+.eq i { width: 3px; height: 30%; background: var(--accent); border-radius: 1px; }
+.music.is-playing .track.current .eq { opacity: 1; }
+.music.is-playing .track.current .eq i { animation: eq 0.9s ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: -0.3s !important; }
+.eq i:nth-child(3) { animation-delay: -0.6s !important; }
+@keyframes eq { 0%, 100% { height: 25%; } 50% { height: 100%; } }
+
+.music-status {
+  margin: 10px 2px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-dim);
+}
+.music-status a { color: var(--accent); }
+
+/* YouTube asks for a player at least 200px tall, kept visible while playing */
+.player {
+  margin-top: 12px;
+  height: 200px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+}
+.player iframe { display: block; width: 100%; height: 100%; border: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .music.is-playing .track.current .disc,
+  .music.is-playing .track.current .eq i { animation: none; }
+}
+
+/* ---------------------------------------------------------------------------
+   Small screens
+--------------------------------------------------------------------------- */
+@media (max-width: 600px) {
+  .card { min-width: 0; padding: 10px 12px 10px; border-radius: 14px; }
+  #hud { right: calc(16px + env(safe-area-inset-right, 0px)); }
+  #hud-card { max-width: 300px; }
+  #clock { font-size: 26px; }
+  #phase { font-size: 11px; margin-top: 4px; }
+  .music {
+    left: calc(12px + env(safe-area-inset-left, 0px));
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: auto;
+    max-height: 62vh;
+    border-radius: 18px;
+  }
+  .music { padding: 12px; }
+  .music-head { margin-bottom: 8px; }
+  .tracks { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .track {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px;
+    position: relative;
+  }
+  .meta .title {
+    font-size: 13px;
+    line-height: 1.2;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .meta .artist { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eq { position: absolute; top: 10px; right: 8px; }
+  .player { height: 200px; margin-top: 10px; }
 }

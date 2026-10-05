@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Cozy Room</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23111%22/%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%225%22 fill=%22%23e4ad4c%22/%3E%3C/svg%3E">
   <link rel="stylesheet" href="./style.css">
   <script type="importmap">
   {
@@ -18,18 +19,39 @@
   <canvas id="scene"></canvas>
 
   <div id="hud">
-    <div class="card">
+    <div class="card" id="hud-card">
       <div class="row">
-        <span id="clock">--:--</span>
+        <button id="hud-summary" class="summary" type="button" aria-expanded="true" aria-controls="hud-body" title="Show or hide controls">
+          <span id="clock">--:--</span>
+          <span id="phase">&nbsp;</span>
+        </button>
+        <button id="hud-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="hud-body" aria-label="Hide controls">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
-      <div id="phase">&nbsp;</div>
-      <div class="controls">
-        <input id="time-slider" type="range" min="0" max="1439" step="1" value="720" aria-label="Scrub time of day">
-        <button id="live-btn" type="button">Live</button>
+      <div id="hud-body">
+        <div class="hud-inner">
+          <div class="controls">
+            <input id="time-slider" type="range" min="0" max="1439" step="1" value="720" aria-label="Scrub time of day">
+            <button id="live-btn" type="button">Live</button>
+          </div>
+          <div class="hint" id="hint"></div>
+        </div>
       </div>
-      <div class="hint">drag to orbit · scroll to zoom · right-drag or WASD to pan · R resets</div>
     </div>
   </div>
+
+  <section id="music" class="card music" hidden aria-label="Record player">
+    <header class="music-head">
+      <div class="music-title"><span class="note" aria-hidden="true">♪</span> On the turntable</div>
+      <button id="music-close" class="icon-btn" type="button" aria-label="Stop and close" title="Stop and close">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      </button>
+    </header>
+    <ul id="music-list" class="tracks"></ul>
+    <p id="music-status" class="music-status" hidden></p>
+    <div id="music-player" class="player" hidden></div>
+  </section>
 
   <script type="module" src="./src/main.js"></script>
 </body>

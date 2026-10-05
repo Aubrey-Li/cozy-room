@@ -515,11 +515,17 @@ function buildRecordPlayer() {
   vinyl.castShadow = true;
   g.add(vinyl);
   g.add(cylinder(0.012, 0.012, 0.05, M.metal, cx - 0.2, 0.98, cz, 8));
-  // tonearm
+  // tonearm on a pivot: rests beside the platter, swings over the grooves to play
   g.add(cylinder(0.06, 0.06, 0.06, M.metal, cx + 0.28, 0.95, cz - 0.18, 12));
-  const arm = box(0.03, 0.02, 0.5, M.metal, cx + 0.2, 0.99, cz + 0.02);
-  arm.rotation.y = 0.35;
+  const arm = new THREE.Group();
+  arm.position.set(cx + 0.28, 0.99, cz - 0.18);
+  arm.add(cylinder(0.035, 0.035, 0.04, M.metal, 0, 0.0, 0, 10)); // pivot cap
+  arm.add(box(0.025, 0.018, 0.48, M.metal, 0, 0.01, 0.24));    // arm tube
+  arm.add(box(0.05, 0.02, 0.07, M.dark, 0, 0.0, 0.5));          // headshell
+  arm.add(box(0.05, 0.03, 0.05, M.metal, 0, 0.01, -0.07));      // counterweight
   g.add(arm);
+  // arm rest post where the headshell parks
+  g.add(cylinder(0.012, 0.012, 0.06, M.metal, cx + 0.28 + Math.sin(0.2) * 0.5, 0.95, cz - 0.18 + Math.cos(0.2) * 0.5, 6));
 
   // speaker on the floor to the right of the cabinet, under the window
   const sx = 2.78, sz = -3.4;
@@ -536,7 +542,7 @@ function buildRecordPlayer() {
     r.rotation.z = -0.12 - i * 0.05;
     g.add(r);
   });
-  return { group: g, vinyl };
+  return { group: g, vinyl, arm };
 }
 
 // ---------------------------------------------------------------------------
@@ -864,6 +870,138 @@ function buildExtras() {
 
 // ---------------------------------------------------------------------------
 
+const ARM_REST = 0.2;
+
+// ---------------------------------------------------------------------------
+// Floating music notes that drift up from the turntable while a song plays
+
+/** Draw a note as vector shapes so it looks the same on every device. */
+function noteTexture(kind) {
+  const size = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const head = (x, y) => {
+    ctx.beginPath();
+    ctx.ellipse(x, y, 17, 12, -0.45, 0, Math.PI * 2);
+  };
+  const path = new Path2D();
+  const shapes = [];
+  if (kind === 'eighth') {
+    shapes.push(() => { head(46, 96); });
+    shapes.push(() => { ctx.beginPath(); ctx.rect(57, 22, 8, 74); });
+    shapes.push(() => {
+      ctx.beginPath();
+      ctx.moveTo(61, 22);
+      ctx.bezierCurveTo(70, 40, 98, 46, 92, 74);
+      ctx.bezierCurveTo(90, 56, 76, 52, 61, 50);
+      ctx.closePath();
+    });
+  } else if (kind === 'beamed') {
+    shapes.push(() => { head(32, 98); });
+    shapes.push(() => { head(90, 86); });
+    shapes.push(() => { ctx.beginPath(); ctx.rect(43, 30, 8, 68); });
+    shapes.push(() => { ctx.beginPath(); ctx.rect(101, 18, 8, 68); });
+    shapes.push(() => {
+      ctx.beginPath();
+      ctx.moveTo(43, 30); ctx.lineTo(109, 18); ctx.lineTo(109, 34); ctx.lineTo(43, 46);
+      ctx.closePath();
+    });
+  } else {
+    // quarter note
+    shapes.push(() => { head(52, 96); });
+    shapes.push(() => { ctx.beginPath(); ctx.rect(63, 20, 8, 76); });
+  }
+  void path;
+  // pass 1: soft warm glow + dark outline, pass 2: white fill (tinted by the sprite colour)
+  ctx.lineJoin = 'round';
+  ctx.shadowColor = 'rgba(255, 180, 90, 0.9)';
+  ctx.shadowBlur = 14;
+  ctx.strokeStyle = 'rgba(70, 38, 18, 0.9)';
+  ctx.lineWidth = 10;
+  for (const draw of shapes) { draw(); ctx.stroke(); }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ffffff';
+  for (const draw of shapes) { draw(); ctx.fill(); }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createNotes(origin) {
+  const textures = ['eighth', 'beamed', 'quarter', 'eighth'].map(noteTexture);
+  const tints = [0xffd27a, 0xffb85c, 0xfff0c8, 0xff9f8a];
+  const group = new THREE.Group();
+  const pool = [];
+  for (let i = 0; i < 14; i++) {
+    const mat = new THREE.SpriteMaterial({
+      map: textures[i % textures.length],
+      color: tints[i % tints.length],
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const sprite = new THREE.Sprite(mat);
+    sprite.visible = false;
+    sprite.renderOrder = 5;
+    group.add(sprite);
+    pool.push({ sprite, age: 0, life: 1, drift: 0, sway: 0, phase: 0, size: 0.2 });
+  }
+  let spawnTimer = 0;
+
+  function spawn() {
+    const n = pool.find((p) => !p.sprite.visible);
+    if (!n) return;
+    n.age = 0;
+    n.life = 2.6 + Math.random() * 1.2;
+    n.drift = (Math.random() - 0.5) * 0.5; // sideways travel over the note's life
+    n.sway = 0.06 + Math.random() * 0.06;
+    n.phase = Math.random() * Math.PI * 2;
+    n.size = 0.36 + Math.random() * 0.16;
+    n.x0 = origin.x + (Math.random() - 0.5) * 0.4;
+    n.z0 = origin.z + (Math.random() - 0.5) * 0.3 + 0.1;
+    n.sprite.visible = true;
+  }
+
+  // viewScale keeps notes legible when zoomed out
+  function update(dt, playing, viewScale = 1) {
+    if (playing) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) {
+        spawn();
+        spawnTimer = 0.32 + Math.random() * 0.3;
+      }
+    }
+    for (const n of pool) {
+      if (!n.sprite.visible) continue;
+      n.age += dt;
+      const t = n.age / n.life;
+      if (t >= 1) {
+        n.sprite.visible = false;
+        n.sprite.material.opacity = 0;
+        continue;
+      }
+      const rise = 1.5 * (1 - (1 - t) * (1 - t)); // eases out as it floats up
+      n.sprite.position.set(
+        n.x0 + n.drift * t + Math.sin(n.age * 2.4 + n.phase) * n.sway,
+        origin.y + 0.1 + rise * Math.sqrt(viewScale),
+        n.z0 + n.drift * 0.4 * t,
+      );
+      // pop in, hold, fade out near the top
+      const fadeIn = Math.min(1, t / 0.12);
+      const fadeOut = 1 - Math.max(0, (t - 0.6) / 0.4);
+      n.sprite.material.opacity = 0.95 * fadeIn * fadeOut;
+      const s = n.size * viewScale * (0.6 + 0.4 * fadeIn);
+      n.sprite.scale.set(s, s, s);
+      n.sprite.material.rotation = Math.sin(n.age * 1.8 + n.phase) * 0.25;
+    }
+  }
+
+  return { group, update };
+}
+const ARM_PLAY = -0.6;
+
 export function buildRoom() {
   const group = new THREE.Group();
   const shell = buildShell();
@@ -892,8 +1030,33 @@ export function buildRoom() {
     for (const l of sl.lights) l.intensity = 3.2 * k;
     shell.glassMat.emissiveIntensity = 0.35 * k;
     shell.glassMat.opacity = 0.22 + 0.18 * state.night;
-    rp.vinyl.rotation.y -= dt * 1.4;
+
+    // ease the platter up to 33⅓ rpm while a song plays and let it coast down after
+    const targetSpin = player.playing ? (33.333 / 60) * Math.PI * 2 : 0;
+    player.spin += (targetSpin - player.spin) * (1 - Math.exp(-dt * (player.playing ? 2.2 : 1.1)));
+    if (player.spin < 0.002 && !player.playing) player.spin = 0;
+    rp.vinyl.rotation.y -= player.spin * dt;
+    // tonearm swings in before the record reaches speed, and back out when it stops
+    const targetArm = player.playing ? ARM_PLAY : ARM_REST;
+    rp.arm.rotation.y += (targetArm - rp.arm.rotation.y) * (1 - Math.exp(-dt * 3));
+    notes.update(dt, player.playing, player.viewScale);
   }
 
-  return { group, update };
+  const player = { playing: false, spin: 0, viewScale: 1 };
+  rp.arm.rotation.y = ARM_REST;
+  const notes = createNotes(rp.vinyl.position.clone());
+  group.add(notes.group);
+
+  return {
+    group,
+    update,
+    recordPlayer: rp.group,
+    setPlaying(on) {
+      player.playing = on;
+    },
+    /** Camera zoom, so floating notes stay readable from far away. */
+    setViewZoom(zoom) {
+      player.viewScale = THREE.MathUtils.clamp(2 / Math.pow(zoom, 0.7), 0.6, 2.6);
+    },
+  };
 }
