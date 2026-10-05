@@ -1,7 +1,8 @@
 // Record-player song list. Audio streams through YouTube's IFrame Player API
-// (the songs are copyrighted, so nothing is bundled). YouTube requires the
-// player to stay visible while it plays, so it lives inside the panel and
-// closing the panel stops the music.
+// (the songs are copyrighted, so nothing is bundled). The video shows in the
+// expanded panel; the mini player hides it and offers its own play/pause.
+// Note: YouTube's API policies ask for a visible player of at least 200x200
+// while playing, so hiding it is a deliberate trade-off by the site owner.
 
 export const SONGS = [
   { id: 'JYuyWrkwpok', title: 'Fly Me to the Moon', artist: 'Frank Sinatra', sleeve: '#e4ad4c' },
@@ -41,6 +42,7 @@ export function createMusicPanel({ onPlayingChange }) {
   const closeBtn = document.getElementById('music-close');
   const playerHost = document.getElementById('music-player');
   const collapseBtn = document.getElementById('music-collapse');
+  const playPauseBtn = document.getElementById('music-playpause');
   const summaryBtn = document.getElementById('music-summary');
   const nowTitle = panel.querySelector('.now-title');
   const nowArtist = panel.querySelector('.now-artist');
@@ -54,6 +56,8 @@ export function createMusicPanel({ onPlayingChange }) {
     if (on === playing) return;
     playing = on;
     panel.classList.toggle('is-playing', on);
+    playPauseBtn.setAttribute('aria-label', on ? 'Pause' : 'Play');
+    playPauseBtn.title = on ? 'Pause' : 'Play';
     onPlayingChange?.(on);
   };
 
@@ -100,6 +104,11 @@ export function createMusicPanel({ onPlayingChange }) {
     collapseBtn.title = mini ? 'Show song list' : 'Minimize';
   }
   const toggleMini = () => setMini(!panel.classList.contains('mini'));
+  playPauseBtn.addEventListener('click', () => {
+    if (!player) return;
+    if (playing) player.pauseVideo();
+    else player.playVideo();
+  });
   collapseBtn.addEventListener('click', toggleMini);
   summaryBtn.addEventListener('click', toggleMini);
 

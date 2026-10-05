@@ -188,13 +188,44 @@ button[disabled] { opacity: 0.45; cursor: default; }
 .now-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .now-artist { font-size: 11px; color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* mini player: just the song name and a 200px square video (YouTube's minimum visible size) */
-.music.mini { width: auto; padding: 10px; }
-.music.mini .music-head { width: 200px; margin-bottom: 0; gap: 8px; }
+/* play/pause only appears in the mini player, where YouTube's own controls are hidden */
+#music-playpause { display: none; }
+#music-playpause .i-play { display: none; }
+.music:not(.is-playing) #music-playpause .i-pause { display: none; }
+.music:not(.is-playing) #music-playpause .i-play { display: block; margin-left: 2px; }
+
+.mini-disc {
+  display: none;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--accent) 0 16%, #141414 17% 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 0 0 5px rgba(255, 255, 255, 0.03);
+}
+.music.is-playing .mini-disc { animation: disc 1.8s linear infinite; }
+@keyframes disc { to { transform: rotate(360deg); } }
+
+/* mini player: a compact now-playing bar; the YouTube player keeps running out of sight */
+.music.mini { width: auto; padding: 10px 10px 10px 12px; overflow: hidden; border-radius: 999px; }
+.music.mini .music-head { width: 260px; margin-bottom: 0; gap: 8px; }
 .music.mini .tracks { display: none; }
-.music.mini.has-song .music-heading { display: none; }
-.music.mini.has-song .now { display: flex; }
-.music.mini .player { width: 200px; height: 200px; margin-top: 8px; }
+.music.mini.has-song .music-heading,
+.music.mini.has-song .note { display: none; }
+.music.mini.has-song .now,
+.music.mini.has-song .mini-disc { display: flex; }
+.music.mini.has-song #music-playpause { display: grid; }
+.music.mini .player {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200px;
+  height: 200px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.music.mini .music-status { display: none; }
 .music.mini #music-collapse svg { transform: rotate(180deg); }
 
 .tracks {
@@ -277,6 +308,7 @@ button[disabled] { opacity: 0.45; cursor: default; }
 .player iframe { display: block; width: 100%; height: 100%; border: 0; }
 
 @media (prefers-reduced-motion: reduce) {
+  .music.is-playing .mini-disc,
   .music.is-playing .track.current .disc,
   .music.is-playing .track.current .eq i { animation: none; }
 }
@@ -320,6 +352,6 @@ button[disabled] { opacity: 0.45; cursor: default; }
   .eq { position: absolute; top: 10px; right: 8px; }
   .player { height: 200px; margin-top: 10px; }
   /* the mini player tucks into the corner instead of spanning the screen */
-  .music.mini { left: auto; width: auto; max-height: none; padding: 10px; }
-  .music.mini .player { margin-top: 8px; }
+  .music.mini { left: auto; width: auto; max-height: none; padding: 8px 8px 8px 10px; }
+  .music.mini .music-head { width: min(260px, calc(100vw - 48px)); }
 }

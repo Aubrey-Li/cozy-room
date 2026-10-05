@@ -45,10 +45,15 @@
     <header class="music-head">
       <button id="music-summary" class="music-summary" type="button" aria-controls="music-list" title="Show or hide the song list">
         <span class="note" aria-hidden="true">♪</span>
+        <span class="mini-disc" aria-hidden="true"></span>
         <span class="music-heading">On the turntable</span>
         <span class="now" id="music-now"><span class="now-title"></span><span class="now-artist"></span></span>
       </button>
       <div class="head-actions">
+        <button id="music-playpause" class="icon-btn" type="button" aria-label="Pause" title="Pause">
+          <svg class="i-pause" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          <svg class="i-play" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+        </button>
         <button id="music-collapse" class="icon-btn" type="button" aria-expanded="true" aria-controls="music-list" aria-label="Minimize player" title="Minimize">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
