@@ -217,12 +217,12 @@ function buildShell() {
     depthWrite: false,
   });
 
-  // two casement sashes hinged at the outer edges, swinging into the room
+  // two casement sashes hinged at the outer edges, swinging out over the meadow
   const sashW = ww / 2;
   const sb = 0.05; // sash bar thickness
   const makeSash = (hingeX, dir) => {
     const pivot = new THREE.Group();
-    pivot.position.set(hingeX, wcy, wz + 0.02);
+    pivot.position.set(hingeX, wcy, wz - 0.08); // hinge near the outer face of the wall
     const cx = dir * sashW / 2;
     pivot.add(box(sashW, sb, 0.06, frameMat, cx, wh / 2 - sb / 2, 0));
     pivot.add(box(sashW, sb, 0.06, frameMat, cx, -wh / 2 + sb / 2, 0));
@@ -1113,7 +1113,7 @@ export function buildRoom() {
   group.add(rp.group);
   group.add(buildTallPlant(3.5, -2.55));
   group.add(buildMonstera(-3.3, 3.2));
-  group.add(buildSucculent(2.15, 0.82, -3.38, 0.75)); // on the record cabinet, clear of the sashes
+  group.add(buildSucculent(2.55, 1.92, -3.66, 0.9)); // on the windowsill
   group.add(buildGallery());
   const sl = buildStringLights();
   group.add(sl.group);
@@ -1143,8 +1143,9 @@ export function buildRoom() {
     const target = windowState.open ? 1 : 0;
     windowState.amount += (target - windowState.amount) * (1 - Math.exp(-dt * 3.2));
     const ease = windowState.amount * windowState.amount * (3 - 2 * windowState.amount);
-    shell.sashes[0].rotation.y = -SASH_OPEN * ease;
-    shell.sashes[1].rotation.y = SASH_OPEN * ease;
+    // positive yaw swings the left sash's free edge toward -z, i.e. outside
+    shell.sashes[0].rotation.y = SASH_OPEN * ease;
+    shell.sashes[1].rotation.y = -SASH_OPEN * ease;
     const windTarget = windowState.open ? 1 : 0;
     windowState.wind += (windTarget - windowState.wind) * (1 - Math.exp(-dt * (windowState.open ? 0.9 : 1.6)));
     elapsed += dt;
@@ -1154,7 +1155,7 @@ export function buildRoom() {
 
   const player = { playing: false, spin: 0, viewScale: 1 };
   const windowState = { open: false, amount: 0, wind: 0 };
-  const SASH_OPEN = THREE.MathUtils.degToRad(72);
+  const SASH_OPEN = THREE.MathUtils.degToRad(80);
   rp.arm.rotation.y = ARM_REST;
   const notes = createNotes(rp.vinyl.position.clone());
   group.add(notes.group);
