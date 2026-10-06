@@ -394,3 +394,84 @@ export function makeLinenTexture(size = 256) {
   }
   return repeat(srgb(new THREE.CanvasTexture(c)), 3, 5);
 }
+
+// ---------------------------------------------------------------------------
+// Rug: a carved pile of concentric arches whose sides run on as straight lines,
+// layered over a field of straight lines. Each arch is a "U": rings around a
+// centre on one side, parallel lines on the other. One field drives both the
+// groove colour and the bump map, so the grooves read as carved into the pile.
+// ---------------------------------------------------------------------------
+export function makeArchRugTextures(size = 1024) {
+  const S = size;
+  const rnd = seeded(53);
+  const lambda = S / 46; // groove spacing
+
+  // arches in texture space (0..1, y down). `up` arches curve toward the top and
+  // their straight sides run downward; the rest are flipped. Later ones sit on top.
+  const arches = [
+    { x: 0.74, y: 0.6, r: 0.22, legs: 0.44, up: false },
+    { x: 0.31, y: 0.3, r: 0.26, legs: 0.33, up: true },
+    { x: 0.75, y: 0.3, r: 0.12, legs: 0.16, up: true },
+    { x: 0.43, y: 0.93, r: 0.31, legs: 0.4, up: true },
+  ].map((a) => ({ ...a, x: a.x * S, y: a.y * S, r: a.r * S, legs: a.legs * S }));
+
+  // distance-like field whose contours are the grooves
+  function field(x, y) {
+    for (let k = arches.length - 1; k >= 0; k--) {
+      const a = arches[k];
+      const dx = x - a.x;
+      const dy = (y - a.y) * (a.up ? 1 : -1); // dy < 0 is the curved side
+      if (dy <= 0) {
+        const d = Math.hypot(dx, dy);
+        if (d <= a.r) return d;
+      } else if (dy <= a.legs && Math.abs(dx) <= a.r) {
+        return Math.abs(dx);
+      }
+    }
+    return x + S * 0.37; // background: straight lines
+  }
+
+  // smooth groove profile across one spacing
+  const halfWidth = 0.14;
+  const groove = (d) => {
+    const f = (((d / lambda) % 1) + 1) % 1;
+    const e = Math.min(f, 1 - f);
+    return 1 - THREE.MathUtils.smoothstep(e, halfWidth * 0.55, halfWidth);
+  };
+
+  const g = new Float32Array(S * S);
+  // 2x2 supersampling keeps the curves clean
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      let v = 0;
+      for (const [ox, oy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) v += groove(field(x + ox, y + oy));
+      g[y * S + x] = v / 4;
+    }
+  }
+
+  const c = canvas(S, S);
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(S, S);
+  const cream = [238, 232, 220], taupe = [186, 176, 160];
+  const bc = canvas(S, S);
+  const bctx = bc.getContext('2d');
+  const bimg = bctx.createImageData(S, S);
+  for (let i = 0; i < S * S; i++) {
+    const t = g[i];
+    const grain = (rnd() - 0.5) * 14;
+    img.data[i * 4] = cream[0] + (taupe[0] - cream[0]) * t + grain;
+    img.data[i * 4 + 1] = cream[1] + (taupe[1] - cream[1]) * t + grain;
+    img.data[i * 4 + 2] = cream[2] + (taupe[2] - cream[2]) * t + grain;
+    img.data[i * 4 + 3] = 255;
+    // high pile everywhere, pressed down along the grooves, with fine tufting
+    const h = 190 - t * 120 + (rnd() - 0.5) * 30;
+    bimg.data[i * 4] = bimg.data[i * 4 + 1] = bimg.data[i * 4 + 2] = h;
+    bimg.data[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  bctx.putImageData(bimg, 0, 0);
+  const map = srgb(new THREE.CanvasTexture(c));
+  map.anisotropy = 8;
+  const bump = new THREE.CanvasTexture(bc);
+  return { map, bump };
+}

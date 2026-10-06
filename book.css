@@ -1,0 +1,292 @@
+/* ---------------------------------------------------------------------------
+   Bookshelf book overlay
+--------------------------------------------------------------------------- */
+.book-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  --paper: #f3e8cf;
+  --ink: #3a2d20;
+  --ink-soft: #7a6247;
+  --cloth: #2e4a3c;
+  --gold: #d9b56a;
+}
+.book-overlay[hidden] { display: none; }
+.book-overlay:focus { outline: none; }
+
+.book-backdrop {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(16, 12, 20, 0.5), rgba(6, 5, 10, 0.82));
+  backdrop-filter: blur(6px) saturate(0.9);
+  -webkit-backdrop-filter: blur(6px) saturate(0.9);
+}
+
+.book-stage {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  perspective: 2400px;
+  perspective-origin: 50% 40%;
+  touch-action: none;
+}
+
+.book {
+  position: relative;
+  width: calc(var(--pw) * 2);
+  height: var(--ph);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.single .book { width: var(--pw); }
+
+/* ---------------------------------------------------------------- paper */
+.page {
+  width: var(--pw);
+  height: var(--ph);
+  box-sizing: border-box;
+  /* sized from the page itself, never %: percentage padding follows the containing
+     block's width, which differs between the spread, a turning leaf and the measurer */
+  padding: calc(var(--ph) * 0.075) calc(var(--pw) * 0.13) calc(var(--ph) * 0.05);
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  font-family: "EB Garamond", "Cormorant Garamond", Garamond, "Iowan Old Style", Georgia, serif;
+  background-color: var(--paper);
+  /* fine grain + soft mottling + a warm vignette toward the edges */
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.35 0 0 0 0 0.26 0 0 0 0 0.15 0 0 0 0.16 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.02' numOctaves='3' seed='4'/%3E%3CfeColorMatrix values='0 0 0 0 0.55 0 0 0 0 0.42 0 0 0 0 0.25 0 0 0 0.13 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse 85% 80% at 50% 50%, transparent 55%, rgba(140, 100, 50, 0.16) 100%);
+  overflow: visible;
+}
+/* the gutter darkens toward the spine on each side */
+.page.left { box-shadow: inset -26px 0 30px -18px rgba(70, 45, 20, 0.35); }
+.page.right { box-shadow: inset 26px 0 30px -18px rgba(70, 45, 20, 0.35); }
+
+.book > .page { position: absolute; top: 0; }
+.book > .page.left {
+  left: 0;
+  border-radius: 4px 0 0 4px;
+  box-shadow:
+    inset -26px 0 30px -18px rgba(70, 45, 20, 0.35),
+    -1px 0 0 #e6dbc0, -2px 0 0 #cdbf9d, -3px 0 0 #e9dfc6, -4px 0 0 #c9b994, -5px 0 0 #e3d8bc, -6px 0 0 #bba984,
+    0 1px 0 #e6dbc0, 0 2px 0 #cdbf9d, 0 3px 0 #e9dfc6, 0 4px 0 #c9b994,
+    0 22px 50px rgba(0, 0, 0, 0.5);
+}
+.book > .page.right {
+  left: var(--pw);
+  border-radius: 0 4px 4px 0;
+  box-shadow:
+    inset 26px 0 30px -18px rgba(70, 45, 20, 0.35),
+    1px 0 0 #e6dbc0, 2px 0 0 #cdbf9d, 3px 0 0 #e9dfc6, 4px 0 0 #c9b994, 5px 0 0 #e3d8bc, 6px 0 0 #bba984,
+    0 1px 0 #e6dbc0, 0 2px 0 #cdbf9d, 0 3px 0 #e9dfc6, 0 4px 0 #c9b994,
+    0 22px 50px rgba(0, 0, 0, 0.5);
+}
+.single .book > .page.right { left: 0; border-radius: 3px 4px 4px 3px; }
+/* narrower side margins on phones; set on every page copy so a turning leaf matches */
+.single .page { padding-left: calc(var(--pw) * 0.09); padding-right: calc(var(--pw) * 0.09); }
+.single .book > .page.left { display: none; }
+
+/* ---------------------------------------------------------------- type */
+.running-head {
+  text-align: center;
+  font-size: calc(var(--ph) * 0.017);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  font-variant: small-caps;
+  margin-bottom: calc(var(--ph) * 0.035);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.page-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.poem-title {
+  margin: 0;
+  font-weight: 500;
+  font-size: 1.32em;
+  line-height: 1.15;
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+.poem-author {
+  margin: 0.35em 0 1.25em;
+  text-align: center;
+  font-size: 0.8em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.poem {
+  white-space: pre-wrap;
+  line-height: 1.42;
+  /* the poem block sits centred on the page, its lines left-aligned */
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+  /* a faint ink spread so text sits in the paper rather than on it */
+  text-shadow: 0 0 0.6px rgba(58, 45, 32, 0.45);
+}
+.folio {
+  text-align: center;
+  font-size: calc(var(--ph) * 0.02);
+  color: var(--ink-soft);
+  margin-top: calc(var(--ph) * 0.02);
+}
+.page-end { align-items: center; justify-content: center; }
+.end-ornament { font-size: calc(var(--ph) * 0.05); color: rgba(122, 98, 71, 0.6); }
+
+.ribbon {
+  position: absolute;
+  top: -8px;
+  left: calc(var(--pw) * 0.14);
+  width: calc(var(--pw) * 0.035);
+  height: 44%;
+  background: linear-gradient(90deg, #7e1a24, #a8303a 45%, #84202a);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 93%, 0 100%);
+  filter: drop-shadow(1px 2px 1px rgba(0, 0, 0, 0.25));
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- cover */
+.cover {
+  position: absolute;
+  top: 0;
+  left: var(--pw);
+  width: var(--pw);
+  height: var(--ph);
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  z-index: 3;
+}
+.single .cover { left: 0; }
+.cover[hidden] { display: none; }
+.cover-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.cover-back { transform: rotateY(180deg); border-radius: 4px 0 0 4px; }
+.cover-front {
+  border-radius: 3px 6px 6px 3px;
+  background-color: var(--cloth);
+  background-image:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.35), rgba(255, 255, 255, 0.06) 3%, transparent 7%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='c'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9 0.35' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.35 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23c)'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 40% 35%, rgba(255, 255, 255, 0.08), transparent 60%);
+  box-shadow: 0 22px 50px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.3);
+  display: grid;
+  place-items: center;
+}
+.cover-frame {
+  position: absolute;
+  inset: calc(var(--pw) * 0.07);
+  border: 1.5px solid var(--gold);
+  outline: 1px solid rgba(217, 181, 106, 0.55);
+  outline-offset: -6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--ph) * 0.02);
+  color: var(--gold);
+  font-family: "EB Garamond", Garamond, Georgia, serif;
+  text-align: center;
+  padding: 0 10%;
+}
+.cover-ornament { font-size: calc(var(--ph) * 0.05); }
+.cover-title {
+  font-size: calc(var(--ph) * 0.05);
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+  font-variant: small-caps;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+.cover-rule { width: 30%; height: 1px; background: var(--gold); opacity: 0.7; }
+.cover-sub { font-size: calc(var(--ph) * 0.024); letter-spacing: 0.3em; text-transform: uppercase; opacity: 0.85; }
+
+/* ---------------------------------------------------------------- turning leaf */
+.leaf {
+  position: absolute;
+  top: 0;
+  width: var(--pw);
+  height: var(--ph);
+  transform-style: preserve-3d;
+  z-index: 4;
+}
+.leaf.right { left: var(--pw); transform-origin: left center; }
+.leaf.left { left: 0; transform-origin: right center; }
+.single .leaf.right { left: 0; }
+.leaf-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.leaf-face.back { transform: rotateY(180deg); }
+.leaf-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg, rgba(40, 25, 10, 0.35), rgba(40, 25, 10, 0.05) 60%, rgba(255, 255, 255, 0.12));
+  transform: translateZ(1px);
+}
+.leaf.left .leaf-shade { background: linear-gradient(270deg, rgba(40, 25, 10, 0.35), rgba(40, 25, 10, 0.05) 60%, rgba(255, 255, 255, 0.12)); }
+
+.book-measure {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------- controls */
+.book-nav,
+.book-close {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 236, 210, 0.22);
+  background: rgba(20, 16, 24, 0.45);
+  color: #fff6e8;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.3s ease, background 0.15s ease;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.ready .book-nav,
+.ready .book-close { opacity: 1; }
+.book-nav { width: 46px; height: 46px; top: 50%; margin-top: -23px; }
+.book-nav.prev { left: max(16px, env(safe-area-inset-left, 0px)); }
+.book-nav.next { right: max(16px, env(safe-area-inset-right, 0px)); }
+.book-nav[disabled] { opacity: 0 !important; pointer-events: none; }
+.book-close {
+  width: 38px;
+  height: 38px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+}
+@media (hover: hover) {
+  .book-nav:hover,
+  .book-close:hover { background: rgba(255, 255, 255, 0.16); }
+}
+.book-nav:focus-visible,
+.book-close:focus-visible { outline: 2px solid #ffc27a; outline-offset: 3px; }
+
+.single .book-nav { top: auto; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); margin-top: 0; }
+.single .book-nav.prev { left: calc(50% - 62px); }
+.single .book-nav.next { right: calc(50% - 62px); }

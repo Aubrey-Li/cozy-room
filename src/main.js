@@ -6,6 +6,7 @@ import { buildRoom } from './room.js';
 import { Fireflies } from './fireflies.js';
 import { createWind } from './wind.js';
 import { createMusicPanel } from './music.js';
+import { createBook } from './book.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam } from './time.js';
 
 // ---------------------------------------------------------------------------
@@ -246,9 +247,13 @@ const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
 
 // things in the room you can click, checked against whatever the ray hits first
+const book = createBook();
 const clickables = [
   { roots: [room.recordPlayer], action: () => music.open() },
+  { roots: [room.bookshelf], action: (at) => book.open(at) },
   { roots: room.windowTargets, action: () => room.toggleWindow() },
+  { roots: [room.lamp], action: () => room.cycleLamp() },
+  { roots: [room.lightSwitch], action: () => room.cycleStringLights() },
 ];
 
 function pick(clientX, clientY) {
@@ -277,7 +282,7 @@ canvas.addEventListener('pointerup', (e) => {
   // event timestamps mark when the touch happened, so a slow frame in between cannot turn a tap into a long press
   const quick = e.timeStamp - press.t < 600;
   press = null;
-  if (moved < 6 && quick) pick(e.clientX, e.clientY)?.action();
+  if (moved < 6 && quick) pick(e.clientX, e.clientY)?.action({ x: e.clientX, y: e.clientY });
 });
 
 // pointer cursor when hovering something clickable (mouse only, at most once per frame)
@@ -288,7 +293,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, room, music, THREE };
+  window.__cozy = { camera, room, music, book, THREE };
 }
 
 function updateHover() {
@@ -361,6 +366,8 @@ function applyLighting(s) {
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
+  // the scene sits frozen and blurred behind the book, so skip rendering it while reading
+  if (book.isOpen) return;
   const t = clock.elapsedTime;
   const hours = currentHours();
   computeSky(hours, state);
@@ -373,7 +380,7 @@ function frame() {
   applyLighting(state);
   sky.update(state, t, camera);
   room.setViewZoom(camera.zoom);
-  room.update(state, dt);
+  room.update(state, dt, t);
   wind.update(t);
   fireflies.update(t, state.night);
 

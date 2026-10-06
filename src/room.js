@@ -3,12 +3,17 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } from './foliage.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
-  makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture,
+  makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture, makeArchRugTextures,
 } from './textures.js';
 
 // Room footprint: x in [-4, 4], z in [-4, 4]. Floor top at y = 0.
 // Back walls: wall A along z = -4 (with the window), wall B along x = -4.
 const W = 4;
+const W_INNER = 3.85;
+// curtains: 0.15 in front of the wall face, clear of the window frame (which reaches z = -3.8)
+const CURTAIN_Z = -3.7;
+// the hem stops just above the windowsill top (y = 1.92)
+const CURTAIN_HEM_Y = 1.97; // inner faces of the back walls sit at x = -3.85 and z = -3.85
 const WALL_H = 5;
 const WALL_T = 0.3;
 
@@ -31,9 +36,7 @@ const T = {
   plaster: makePlasterBump(),
   walnut: makeWoodTexture(0x8a5a36, 0x4a2c15, 512, 5),
   oak: makeWoodTexture(0xd2a874, 0x8a6236, 512, 9),
-  weave: makeFabricBump(256, 28),
 };
-T.weave.repeat.set(6, 6);
 
 const M = {
   wall: mat(0xf4e8d4, { roughness: 0.95, bumpMap: T.plaster, bumpScale: 0.02 }),
@@ -47,9 +50,6 @@ const M = {
   pillow: fabric(0xfff9ee, { bumpScale: 0.02 }),
   pillowAccent: fabric(0xe9803a, { bumpScale: 0.02, sheen: 0.85, sheenColor: new THREE.Color(0xffd2a8) }),
   cushion: fabric(0xe7bb8e, { bumpScale: 0.02 }),
-  rugOuter: mat(0xc96f5a, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
-  rugInner: mat(0xf1dec3, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
-  rugStripe: mat(0x8d5a4a, { roughness: 1, bumpMap: T.weave, bumpScale: 0.02 }),
   pot: mat(0xc9714a, { roughness: 0.9 }),
   potCream: mat(0xf1e6d6, { roughness: 0.9 }),
   soil: mat(0x3a2a1e, { roughness: 1 }),
@@ -59,7 +59,7 @@ const M = {
   dark: mat(0x2a2320, { roughness: 0.6 }),
   metal: mat(0xb9b2a6, { roughness: 0.4, metalness: 0.7 }),
   brass: mat(0xd6a85c, { roughness: 0.35, metalness: 0.8 }),
-  lampShade: mat(0xf6dcae, { roughness: 1, side: THREE.DoubleSide }),
+  lampShade: mat(0xf6dcae, { roughness: 1, side: THREE.DoubleSide, emissive: 0xffb86b, emissiveIntensity: 0 }),
   curtain: fabric(0xe9c8a6, { bumpScale: 0.02 }),
   guitar: mat(0xd28d44, { roughness: 0.5 }),
   guitarDark: mat(0x3b2415, { roughness: 0.6 }),
@@ -252,14 +252,17 @@ function buildShell() {
   const rodY = win.y1 + 0.45;
   const curtains = [
     // the left panel is narrower so it clears the bookshelf
-    buildCurtain(win.x0 - 0.27, rodY, wz + 0.26, 0.4, rodY - (win.y0 - 0.42), 1),
-    buildCurtain(win.x1 + 0.3, rodY, wz + 0.26, 0.5, rodY - (win.y0 - 0.42), -1),
+    // sill-length, hanging clear of the frame; the sill juts into the room, so longer
+    // curtains would pass straight through it
+    buildCurtain(win.x0 - 0.27, rodY, CURTAIN_Z, 0.4, rodY - CURTAIN_HEM_Y, 1),
+    buildCurtain(win.x1 + 0.3, rodY, CURTAIN_Z, 0.5, rodY - CURTAIN_HEM_Y, -1),
   ];
   for (const c of curtains) g.add(c.mesh);
 
   // curtain rod
-  const rod = cylinder(0.025, 0.025, ww + 1.2, M.brass, wcx, win.y1 + 0.45, wz + 0.26);
+  const rod = cylinder(0.025, 0.025, ww + 1.2, M.brass, wcx, win.y1 + 0.45, CURTAIN_Z);
   rod.rotation.z = Math.PI / 2;
+  rod.raycast = () => {}; // the thin rod should not block clicks on the window
   g.add(rod);
 
   // baseboards
@@ -833,7 +836,7 @@ function buildPothos(x, y, z) {
 
 function buildGallery() {
   const g = new THREE.Group();
-  const x = -W + 0.15 + WALL_T / 2 + 0.03; // just proud of wall B
+  const x = -W_INNER + 0.03; // frames are 0.06 deep, so their backs sit flush on wall B
   const frames = [
     { z: -3.0, y: 3.35, w: 0.6, h: 0.8, mat: M.frameDark, kind: 'portrait' },
     { z: -2.2, y: 3.55, w: 0.8, h: 0.6, mat: M.frameLight, kind: 'sunset' },
@@ -858,7 +861,8 @@ function buildGallery() {
 
 function buildStringLights() {
   const g = new THREE.Group();
-  const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff0d2, emissive: 0xffc27a, emissiveIntensity: 0.1 });
+  // bulbs alternate between two materials so the strand can run in alternating mode
+  const bulbMats = [0, 1].map(() => new THREE.MeshStandardMaterial({ color: 0xfff0d2, emissive: 0xffc27a, emissiveIntensity: 0.1 }));
   const bulbGeo = new THREE.SphereGeometry(0.065, 10, 8);
   const strands = [
     // along wall B (x fixed), varying z
@@ -866,8 +870,8 @@ function buildStringLights() {
     // along wall A (z fixed), varying x
     [[-3.9, 4.65, -3.75], [-2.0, 4.1, -3.6], [0.0, 4.6, -3.75], [2.0, 4.1, -3.6], [3.9, 4.65, -3.75]],
   ];
-  const lights = [];
-  for (const pts of strands) {
+  const bulbs = [[], []]; // world positions, by alternating group
+  strands.forEach((pts, strandIndex) => {
     const curve = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)));
     const wire = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.012, 5), M.wire);
     g.add(wire);
@@ -877,19 +881,116 @@ function buildStringLights() {
       const hang = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.12, 4), M.wire);
       hang.position.set(p.x, p.y - 0.06, p.z);
       g.add(hang);
-      const b = new THREE.Mesh(bulbGeo, bulbMat);
+      const b = new THREE.Mesh(bulbGeo, bulbMats[i % 2]);
       b.position.set(p.x, p.y - 0.17, p.z);
       g.add(b);
+      bulbs[i % 2].push({ strand: strandIndex, pos: b.position.clone() });
     }
-    for (const t of [0.3, 0.7]) {
-      const p = curve.getPoint(t);
-      const l = new THREE.PointLight(0xffc27a, 0, 6, 2);
-      l.position.set(p.x + 0.25, p.y - 0.3, p.z + 0.25);
-      g.add(l);
-      lights.push(l);
+  });
+
+  // Diffuse light: rather than point lights hugging the plaster (which painted hard
+  // circles on the walls), a soft warm halo is painted onto each wall around the bulbs,
+  // and two gentle lights sit well inside the room for the overall wash.
+  const halos = [];
+  for (const wall of ['B', 'A']) {
+    for (const groupIndex of [0, 1]) {
+      const mesh = buildHalo(wall, bulbs[groupIndex].filter((b) => b.strand === (wall === 'B' ? 0 : 1)).map((b) => b.pos));
+      g.add(mesh);
+      halos.push({ mesh, group: groupIndex });
     }
   }
-  return { group: g, bulbMat, lights };
+  const lights = [
+    new THREE.PointLight(0xffc27a, 0, 12, 1.2),
+    new THREE.PointLight(0xffc27a, 0, 12, 1.2),
+  ];
+  lights[0].position.set(-2.1, 3.9, -0.6); // in from wall B
+  lights[1].position.set(0.6, 3.9, -2.2);  // in from wall A
+  for (const l of lights) g.add(l);
+
+  // thin overhead decoration: clicks pass through to whatever is behind (like the window)
+  g.traverse((o) => { if (o.isMesh) o.raycast = () => {}; });
+  return { group: g, bulbMats, lights, halos };
+}
+
+/**
+ * A soft warm glow painted on a wall around a set of bulbs. The texture is drawn in
+ * the wall's own coordinates; additive blending lets it brighten whatever is behind.
+ */
+function buildHalo(wall, positions) {
+  const span = 8, y0 = 2.2, y1 = 5.0, h = y1 - y0;
+  const W = 1024, H = Math.round((W * h) / span);
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext('2d');
+  // wall B faces +x (u runs from z=+4 to z=-4); wall A faces +z (u runs from x=-4 to x=+4)
+  const toU = (p) => (wall === 'B' ? (4 - p.z) / span : (p.x + 4) / span);
+  const pxPerUnit = W / span;
+  for (const p of positions) {
+    const x = toU(p) * W;
+    const y = (1 - (p.y - y0) / h) * H;
+    const r = 0.75 * pxPerUnit;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(255, 196, 130, 0.55)');
+    grad.addColorStop(0.35, 'rgba(255, 180, 110, 0.22)');
+    grad.addColorStop(1, 'rgba(255, 170, 100, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  if (wall === 'A') {
+    // keep the glow off the window opening
+    ctx.globalCompositeOperation = 'destination-out';
+    const wx0 = ((1.0 + 4) / span) * W, wx1 = ((3.2 + 4) / span) * W;
+    const wy0 = (1 - (3.9 - y0) / h) * H;
+    const fadeTop = ctx.createLinearGradient(0, wy0 - 12, 0, wy0 + 6);
+    fadeTop.addColorStop(0, 'rgba(0,0,0,0)');
+    fadeTop.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = fadeTop;
+    ctx.fillRect(wx0, wy0 - 12, wx1 - wx0, H);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(span, h), mat);
+  const off = -W_INNER + 0.012; // just proud of the plaster
+  if (wall === 'B') {
+    mesh.rotation.y = Math.PI / 2;
+    mesh.position.set(off, (y0 + y1) / 2, 0);
+  } else {
+    mesh.position.set(0, (y0 + y1) / 2, off);
+  }
+  mesh.renderOrder = 1;
+  mesh.raycast = () => {}; // decorative: let clicks pass through to the window behind
+  return mesh;
+}
+
+/** A little light switch beside the window that cycles the string lights. */
+function buildLightSwitch(x, y, z) {
+  const g = new THREE.Group();
+  g.position.set(x, y, z);
+  const plate = box(0.15, 0.24, 0.02, M.trim, 0, 0, 0.01, { rounded: 0.008 });
+  g.add(plate);
+  // the rocker tips up or down with each press
+  const rocker = box(0.06, 0.11, 0.025, mat(0xf3eee4, { roughness: 0.5 }), 0, 0.01, 0.03, { rounded: 0.006 });
+  g.add(rocker);
+  // a tiny indicator below the rocker shows the current mode
+  const ledMat = new THREE.MeshStandardMaterial({ color: 0x2a2320, emissive: 0xffc27a, emissiveIntensity: 0 });
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.009, 8, 6), ledMat);
+  led.position.set(0, -0.075, 0.024);
+  g.add(led);
+  // two screws
+  for (const sy of [0.095, -0.095]) {
+    const screw = cylinder(0.006, 0.006, 0.004, M.metal, 0, sy, 0.022, 8);
+    screw.rotation.x = Math.PI / 2;
+    g.add(screw);
+  }
+  return { group: g, rocker, ledMat };
 }
 
 function buildGuitar() {
@@ -933,29 +1034,111 @@ function buildGuitar() {
   g.rotation.y = Math.PI / 2 + 0.25;
   g.rotation.x = -0.2;
   g.rotation.z = 0.12;
+  // settle it: slide back until it touches the wall and down until it rests on the floor
+  g.updateMatrixWorld(true);
+  const bounds = new THREE.Box3().setFromObject(g);
+  g.position.x += -W_INNER - bounds.min.x;
+  g.position.y += 0 - bounds.min.y;
   return g;
 }
 
+const RUG_T = 0.07; // pile thickness: plush enough to feel heavy underfoot
+
+/** A thick, round velvet-pile rug carved with arches and lines, with a rounded, bound edge. */
 function buildRug() {
   const g = new THREE.Group();
-  const y = 0.012;
-  const mk = (r, material, yy) => {
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.02, 48), material);
-    m.position.set(0.9, yy, 1.1);
-    m.receiveShadow = true;
-    return m;
-  };
-  g.add(mk(1.75, M.rugOuter, y));
-  g.add(mk(1.45, M.rugStripe, y + 0.004));
-  g.add(mk(1.3, M.rugInner, y + 0.008));
-  g.add(mk(0.5, M.rugOuter, y + 0.012));
+  const cx = 0.9, cz = 1.1;
+  const R = 1.95;
+  const edge = 0.05; // radius of the rolled edge
+  const { map, bump } = makeArchRugTextures();
+  const pile = new THREE.MeshPhysicalMaterial({
+    map,
+    bumpMap: bump,
+    bumpScale: 0.08, // deep enough for the carved grooves to catch light
+    roughness: 0.95,
+    metalness: 0,
+    // velvet: a soft sheen that brightens at grazing angles
+    sheen: 0.6,
+    sheenRoughness: 0.45,
+    sheenColor: new THREE.Color(0xfff6ea),
+  });
+  // the edge has no sheen of its own (that drew a bright outline that made the rug
+  // look lifted) and is shaded darker toward the floor through vertex colours
+  const binding = new THREE.MeshStandardMaterial({
+    color: 0xe6dfd2, // the same cream as the pile, so the edge reads as one piece
+    bumpMap: bump,
+    bumpScale: 0.03,
+    roughness: 1,
+    vertexColors: true,
+  });
+
+  // patterned top, mapped flat so the design is not distorted
+  const top = new THREE.Mesh(new THREE.CircleGeometry(R - edge, 128), pile);
+  top.rotation.x = -Math.PI / 2;
+  top.position.set(cx, RUG_T, cz);
+  top.receiveShadow = true;
+  top.castShadow = true;
+  g.add(top);
+
+  // a full bullnose edge: rolls over from the top, bulges out, and tucks under onto the floor
+  const prof = [];
+  const steps = 14;
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 0.62; // from the top, round past vertical
+    prof.push(new THREE.Vector2(R - edge + Math.sin(a) * edge, RUG_T - edge + Math.cos(a) * edge));
+  }
+  const last = prof[prof.length - 1];
+  prof.push(new THREE.Vector2(last.x - 0.008, Math.max(0.006, last.y * 0.35)));
+  prof.push(new THREE.Vector2(last.x - 0.016, 0.0));
+  // a lathe profile must run bottom to top for its faces to point outward
+  prof.reverse();
+  const rimGeo = new THREE.LatheGeometry(prof, 192);
+  // darken toward the floor where the pile is pressed down and out of the light
+  const pos = rimGeo.attributes.position;
+  const colors = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const t = THREE.MathUtils.clamp(pos.getY(i) / RUG_T, 0, 1);
+    // pile wraps the edge in the same cream; only the last centimetre or so sinks into shadow
+    const k = 0.62 + 0.38 * THREE.MathUtils.smoothstep(t, 0.0, 0.45);
+    colors[i * 3] = colors[i * 3 + 1] = colors[i * 3 + 2] = k;
+  }
+  rimGeo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const rim = new THREE.Mesh(rimGeo, binding);
+  rim.position.set(cx, 0, cz);
+  rim.castShadow = true;
+  rim.receiveShadow = true;
+  g.add(rim);
+
+  // contact shadow: the floor darkens softly right where the rug's weight meets it
+  const size = 512;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  const outer = R + 0.16;
+  const grad = ctx.createRadialGradient(size / 2, size / 2, ((R - 0.03) / outer) * (size / 2), size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+  grad.addColorStop(0.18, 'rgba(0,0,0,0.28)');
+  grad.addColorStop(0.5, 'rgba(0,0,0,0.08)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const aoTex = new THREE.CanvasTexture(c);
+  const ao = new THREE.Mesh(
+    new THREE.CircleGeometry(outer, 96),
+    new THREE.MeshBasicMaterial({ map: aoTex, transparent: true, depthWrite: false, toneMapped: false }),
+  );
+  ao.rotation.x = -Math.PI / 2;
+  ao.position.set(cx, 0.002, cz);
+  ao.renderOrder = 1;
+  ao.raycast = () => {};
+  g.add(ao);
   return g;
 }
 
 function buildExtras() {
   const g = new THREE.Group();
   // a floor cushion by the rug
-  g.add(box(0.7, 0.2, 0.7, M.cushion, 2.4, 0.1, 1.9, { rounded: 0.08 }));
+  g.add(box(0.7, 0.2, 0.7, M.cushion, 2.4, RUG_T + 0.1, 1.9, { rounded: 0.08 })); // resting on the rug
   // a small side table with a mug near the window
   g.add(cylinder(0.3, 0.3, 0.04, M.oak, 3.1, 0.5, -1.6, 20));
   g.add(cylinder(0.03, 0.04, 0.5, M.dark, 3.1, 0.25, -1.6, 8));
@@ -967,6 +1150,11 @@ function buildExtras() {
 // ---------------------------------------------------------------------------
 
 const ARM_REST = 0.2;
+
+const LAMP_LEVELS = [1, 0.55, 0.2, 0];
+const BLINK_PERIOD = 2.4; // seconds per breath in blinking mode
+const LIGHT_MODES = ['on', 'alternate', 'blink', 'off'];
+const LED_COLORS = { on: 0xffd9a0, alternate: 0xffa64d, blink: 0xff8fb0, off: 0x000000 };
 
 // ---------------------------------------------------------------------------
 // Floating music notes that drift up from the turntable while a song plays
@@ -1108,7 +1296,8 @@ export function buildRoom() {
   group.add(buildBed());
   const ns = buildNightstandAndLamp();
   group.add(ns.group);
-  group.add(buildBookshelf());
+  const shelf = buildBookshelf();
+  group.add(shelf);
   const rp = buildRecordPlayer();
   group.add(rp.group);
   group.add(buildTallPlant(3.5, -2.55));
@@ -1117,15 +1306,53 @@ export function buildRoom() {
   group.add(buildGallery());
   const sl = buildStringLights();
   group.add(sl.group);
+  // on the wall left of the window, above the record player and below the curtain hem
+  const sw = buildLightSwitch(0.84, 1.28, -3.835);
+  group.add(sw.group);
   group.add(buildGuitar());
   group.add(buildExtras());
 
-  function update(state, dt) {
+  // `time` is real seconds, so light patterns keep their rhythm even when frames are slow
+  function update(state, dt, time = elapsed) {
     const k = state.indoor;
-    ns.light.intensity = 26 * k;
-    ns.bulbMat.emissiveIntensity = 2.2 * k;
-    sl.bulbMat.emissiveIntensity = 0.1 + 2.4 * k;
-    for (const l of sl.lights) l.intensity = 3.2 * k;
+    const approach = (rate) => 1 - Math.exp(-dt * rate);
+
+    // bedside lamp: follows the time of day until someone touches it, then holds their level
+    const lampTarget = lampState.manual ? LAMP_LEVELS[lampState.step] * (0.55 + 0.45 * k) : k;
+    lampState.current += (lampTarget - lampState.current) * approach(7);
+    ns.light.intensity = 26 * lampState.current;
+    ns.bulbMat.emissiveIntensity = 2.2 * lampState.current;
+    M.lampShade.emissiveIntensity = 0.35 * lampState.current;
+
+    // string lights: the same rule for the overall level, then a per-mode pattern on top
+    const base = lightsState.manual ? 0.45 + 0.55 * k : k;
+    const mode = LIGHT_MODES[lightsState.mode];
+    let a = 1, b = 1;
+    if (mode === 'alternate') {
+      const w = 0.5 + 0.5 * Math.sin(time * 2.4);
+      a = 0.12 + 0.88 * w;
+      b = 0.12 + 0.88 * (1 - w);
+    } else if (mode === 'blink') {
+      // a slow breath over 2.4s: ease up, hold, ease down, rest
+      const ph = (time % BLINK_PERIOD) / BLINK_PERIOD;
+      const up = THREE.MathUtils.smootherstep(ph, 0.0, 0.28);
+      const down = 1 - THREE.MathUtils.smootherstep(ph, 0.55, 0.88);
+      a = b = 0.06 + 0.94 * Math.min(up, down);
+    } else if (mode === 'off') {
+      a = b = 0;
+    }
+    const fade = mode === 'blink' || mode === 'alternate' ? 1 : approach(9); // patterns drive themselves
+    lightsState.a += (a - lightsState.a) * fade;
+    lightsState.b += (b - lightsState.b) * fade;
+    sl.bulbMats[0].emissiveIntensity = (0.1 + 2.4 * base) * lightsState.a;
+    sl.bulbMats[1].emissiveIntensity = (0.1 + 2.4 * base) * lightsState.b;
+    const avg = (lightsState.a + lightsState.b) / 2;
+    for (const l of sl.lights) l.intensity = 2.6 * base * avg;
+    for (const h of sl.halos) h.mesh.material.opacity = 0.9 * base * (h.group === 0 ? lightsState.a : lightsState.b);
+    // the switch's little indicator glows in the colour of the current mode
+    sw.ledMat.emissive.setHex(LED_COLORS[mode]);
+    sw.ledMat.emissiveIntensity = mode === 'off' ? 0 : 1.6;
+    sw.rocker.rotation.x += ((lightsState.mode % 2 ? -0.22 : 0.22) - sw.rocker.rotation.x) * approach(18);
     shell.glassMat.emissiveIntensity = 0.35 * k;
     shell.glassMat.opacity = 0.22 + 0.18 * state.night;
 
@@ -1154,6 +1381,8 @@ export function buildRoom() {
   let elapsed = 0;
 
   const player = { playing: false, spin: 0, viewScale: 1 };
+  const lampState = { manual: false, step: 0, current: 0 };
+  const lightsState = { manual: false, mode: 0, a: 1, b: 1 };
   const windowState = { open: false, amount: 0, wind: 0 };
   const SASH_OPEN = THREE.MathUtils.degToRad(80);
   rp.arm.rotation.y = ARM_REST;
@@ -1164,8 +1393,28 @@ export function buildRoom() {
     group,
     update,
     recordPlayer: rp.group,
+    bookshelf: shelf,
     // the window frame, sashes, glass and curtains all respond to clicks
     windowTargets: [shell.hitPane, ...shell.sashes, ...shell.curtains.map((c) => c.mesh)],
+    lamp: ns.group,
+    lightSwitch: sw.group,
+    /** Touch-lamp style: bright, medium, dim, off, and around again. */
+    cycleLamp() {
+      if (!lampState.manual) {
+        lampState.manual = true;
+        // pick up from what the lamp is doing now: lit at night steps down, dark by day turns on
+        lampState.step = lampState.current > 0.5 ? 1 : 0;
+      } else {
+        lampState.step = (lampState.step + 1) % LAMP_LEVELS.length;
+      }
+      return LAMP_LEVELS[lampState.step];
+    },
+    /** Steady, alternating, blinking, off, and around again. */
+    cycleStringLights() {
+      lightsState.manual = true;
+      lightsState.mode = (lightsState.mode + 1) % LIGHT_MODES.length;
+      return LIGHT_MODES[lightsState.mode];
+    },
     toggleWindow() {
       windowState.open = !windowState.open;
       return windowState.open;
