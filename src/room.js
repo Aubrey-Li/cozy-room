@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } from './foliage.js';
+import { createLamplighter } from './games/lamplighter.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
   makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture, makeArchRugTextures,
@@ -392,30 +393,37 @@ function buildBed() {
   return g;
 }
 
-function buildNightstandAndLamp() {
+/** A slim nightstand with a small lamp. Built at the origin, front facing +z. */
+function buildNightstandAndLamp(x, z) {
   const g = new THREE.Group();
-  const x = -3.4, z = 0.1;
-  g.add(box(0.7, 0.62, 0.7, M.oak, x, 0.31, z));
-  g.add(box(0.62, 0.05, 0.62, M.walnut, x, 0.42, z)); // drawer line
-  g.add(cylinder(0.03, 0.03, 0.04, M.brass, x + 0.35, 0.31, z, 8));
-  // lamp
-  g.add(cylinder(0.12, 0.14, 0.05, M.brass, x, 0.645, z));
-  g.add(cylinder(0.025, 0.025, 0.6, M.brass, x, 0.95, z, 8));
+  const w = 0.42, d = 0.44, h = 0.62;
+  g.add(box(w, h, d, M.oak, 0, h / 2, 0));
+  g.add(box(w - 0.06, 0.04, 0.02, M.walnut, 0, 0.42, d / 2 + 0.005)); // drawer line
+  const knob = cylinder(0.025, 0.025, 0.03, M.brass, 0, 0.31, d / 2 + 0.015, 8);
+  knob.rotation.x = Math.PI / 2;
+  g.add(knob);
+  // lamp, scaled down to suit the narrower top
+  const lamp = new THREE.Group();
+  lamp.position.set(-0.07, h, -0.04); // back-left, leaving room for the book
+  lamp.scale.setScalar(0.72);
+  lamp.add(cylinder(0.12, 0.14, 0.05, M.brass, 0, 0.025, 0));
+  lamp.add(cylinder(0.025, 0.025, 0.6, M.brass, 0, 0.33, 0, 8));
   const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.32, 0.34, 20, 1, true), M.lampShade);
-  shade.position.set(x, 1.36, z);
-  shade.castShadow = false;
-  g.add(shade);
+  shade.position.y = 0.74;
+  lamp.add(shade);
   const bulbMat = new THREE.MeshStandardMaterial({ color: 0xfff1cf, emissive: 0xffc27a, emissiveIntensity: 0 });
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), bulbMat);
-  bulb.position.set(x, 1.3, z);
-  g.add(bulb);
+  bulb.position.y = 0.68;
+  lamp.add(bulb);
+  g.add(lamp);
   const light = new THREE.PointLight(0xffb15c, 0, 11, 2);
-  light.position.set(x, 1.32, z);
-  light.castShadow = false;
+  light.position.set(-0.07, h + 0.5, 0.0);
   g.add(light);
-  // a small book stack
-  g.add(box(0.3, 0.05, 0.22, mat(0x6d8fb3), x + 0.0, 0.645, z + 0.2));
-  g.add(box(0.26, 0.05, 0.2, mat(0xd36b5a), x + 0.02, 0.695, z + 0.2));
+  // one small book by the lamp
+  const book = box(0.12, 0.035, 0.17, mat(0xd36b5a), 0.13, h + 0.018, 0.1);
+  book.rotation.y = -0.12;
+  g.add(book);
+  g.position.set(x, 0, z);
   return { group: g, light, bulbMat };
 }
 
@@ -589,59 +597,270 @@ function buildBookshelf() {
   return g;
 }
 
+/**
+ * Record cabinet with a turntable, a bookshelf speaker on top and a few records
+ * leaning against the front. Built at the origin: length along x, front facing +z.
+ */
 function buildRecordPlayer() {
   const g = new THREE.Group();
-  // cabinet sits against wall A, flush with the right side of the bookshelf
-  const cx = 1.55, cz = -3.35;
-  g.add(box(1.6, 0.8, 0.6, M.walnut, cx, 0.4, cz));
-  g.add(box(1.5, 0.02, 0.5, M.oak, cx, 0.81, cz));
-  g.add(box(0.7, 0.3, 0.02, M.oak, cx - 0.4, 0.4, cz + 0.31)); // cabinet doors
-  g.add(box(0.7, 0.3, 0.02, M.oak, cx + 0.4, 0.4, cz + 0.31));
-  g.add(cylinder(0.02, 0.02, 0.03, M.brass, cx - 0.05, 0.4, cz + 0.33, 8));
-  g.add(cylinder(0.02, 0.02, 0.03, M.brass, cx + 0.05, 0.4, cz + 0.33, 8));
-  // legs
+  const L = 1.2, D = 0.55, H = 0.8;
+  g.add(box(L, H, D, M.walnut, 0, H / 2, 0));
+  g.add(box(L - 0.08, 0.02, D - 0.08, M.oak, 0, H + 0.01, 0));
+  g.add(box(L / 2 - 0.08, 0.3, 0.02, M.oak, -L / 4, 0.4, D / 2 + 0.01)); // cabinet doors
+  g.add(box(L / 2 - 0.08, 0.3, 0.02, M.oak, L / 4, 0.4, D / 2 + 0.01));
+  for (const sx of [-0.05, 0.05]) {
+    const pull = cylinder(0.02, 0.02, 0.03, M.brass, sx, 0.4, D / 2 + 0.03, 8);
+    pull.rotation.x = Math.PI / 2;
+    g.add(pull);
+  }
   for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-    const leg = cylinder(0.03, 0.02, 0.25, M.walnut, cx + dx * 0.7, 0.0, cz + dz * 0.22, 6);
+    const leg = cylinder(0.03, 0.02, 0.25, M.walnut, dx * (L / 2 - 0.1), 0.0, dz * (D / 2 - 0.06), 6);
     leg.rotation.z = dx * 0.15;
     g.add(leg);
   }
-  // turntable
-  g.add(box(0.95, 0.1, 0.56, M.dark, cx - 0.1, 0.87, cz));
-  g.add(cylinder(0.38, 0.38, 0.03, M.metal, cx - 0.2, 0.935, cz, 32));
+  // turntable, toward the +x end
+  const C = 0.12; // platter centre
+  const top = H + 0.02;
+  g.add(box(0.72, 0.09, 0.5, M.dark, C + 0.1, top + 0.045, 0));
+  g.add(cylinder(0.3, 0.3, 0.025, M.metal, C, top + 0.1, 0, 32));
   const vinylMat = new THREE.MeshStandardMaterial({ map: makeVinylTexture(), roughness: 0.55 });
-  const vinyl = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.012, 48), [M.dark, vinylMat, M.dark]);
-  vinyl.position.set(cx - 0.2, 0.956, cz);
+  const vinyl = new THREE.Mesh(new THREE.CylinderGeometry(0.285, 0.285, 0.01, 48), [M.dark, vinylMat, M.dark]);
+  vinyl.position.set(C, top + 0.118, 0);
   vinyl.castShadow = true;
   g.add(vinyl);
-  g.add(cylinder(0.012, 0.012, 0.05, M.metal, cx - 0.2, 0.98, cz, 8));
+  g.add(cylinder(0.01, 0.01, 0.04, M.metal, C, top + 0.135, 0, 8));
   // tonearm on a pivot: rests beside the platter, swings over the grooves to play
-  g.add(cylinder(0.06, 0.06, 0.06, M.metal, cx + 0.28, 0.95, cz - 0.18, 12));
+  const px = C + 0.38, pz = -0.15;
+  g.add(cylinder(0.05, 0.05, 0.05, M.metal, px, top + 0.115, pz, 12));
   const arm = new THREE.Group();
-  arm.position.set(cx + 0.28, 0.99, cz - 0.18);
-  arm.add(cylinder(0.035, 0.035, 0.04, M.metal, 0, 0.0, 0, 10)); // pivot cap
-  arm.add(box(0.025, 0.018, 0.48, M.metal, 0, 0.01, 0.24));    // arm tube
-  arm.add(box(0.05, 0.02, 0.07, M.dark, 0, 0.0, 0.5));          // headshell
-  arm.add(box(0.05, 0.03, 0.05, M.metal, 0, 0.01, -0.07));      // counterweight
+  arm.position.set(px, top + 0.15, pz);
+  arm.add(cylinder(0.03, 0.03, 0.035, M.metal, 0, 0, 0, 10));
+  arm.add(box(0.02, 0.015, 0.4, M.metal, 0, 0.008, 0.2));
+  arm.add(box(0.04, 0.018, 0.06, M.dark, 0, 0, 0.42));
+  arm.add(box(0.04, 0.025, 0.04, M.metal, 0, 0.008, -0.06));
   g.add(arm);
-  // arm rest post where the headshell parks
-  g.add(cylinder(0.012, 0.012, 0.06, M.metal, cx + 0.28 + Math.sin(0.2) * 0.5, 0.95, cz - 0.18 + Math.cos(0.2) * 0.5, 6));
+  g.add(cylinder(0.01, 0.01, 0.05, M.metal, px + Math.sin(ARM_REST) * 0.42, top + 0.115, pz + Math.cos(ARM_REST) * 0.42, 6));
 
-  // speaker on the floor to the right of the cabinet, under the window
-  const sx = 2.78, sz = -3.4;
-  g.add(box(0.42, 0.62, 0.4, M.speaker, sx, 0.31, sz, { rounded: 0.02 }));
-  for (const [r, y] of [[0.12, 0.42], [0.06, 0.16]]) {
-    const cone = cylinder(r, r, 0.02, M.speakerCone, sx, y, sz + 0.21, 20);
+  // bookshelf speaker on the -x end of the cabinet
+  const sx = -0.42;
+  g.add(box(0.3, 0.46, 0.32, M.speaker, sx, top + 0.23, -0.04, { rounded: 0.02 }));
+  for (const [r, y] of [[0.085, 0.3], [0.04, 0.1]]) {
+    const cone = cylinder(r, r, 0.02, M.speakerCone, sx, top + y, 0.125, 20);
     cone.rotation.x = Math.PI / 2;
     g.add(cone);
   }
-  // a few records leaning against the speaker
+  // records leaning against the cabinet front, below the speaker
   const sleeves = [0xe4ad4c, 0x4f7a9c, 0xb3462f];
   sleeves.forEach((col, i) => {
-    const r = box(0.02, 0.62, 0.62, mat(col), sx + 0.25 + i * 0.03, 0.33, sz);
-    r.rotation.z = -0.12 - i * 0.05;
+    const r = box(0.5, 0.5, 0.012, mat(col), -0.33 + i * 0.03, 0.26, D / 2 + 0.06 + i * 0.025);
+    r.rotation.x = -0.16 + i * 0.03; // tops resting back against the cabinet
     g.add(r);
   });
   return { group: g, vinyl, arm };
+}
+
+/** Desk under the window: monitor showing the game, keyboard, mouse, PC tower. */
+function buildDesk() {
+  const g = new THREE.Group();
+  const W = 1.85, D = 0.7, H = 1.2; // in proportion with the room's furniture
+  const legMat = mat(0x2b2724, { roughness: 0.5, metalness: 0.4 });
+  g.add(box(W, 0.05, D, M.oak, 0, H - 0.025, 0, { rounded: 0.01 }));
+  for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    g.add(box(0.045, H - 0.05, 0.045, legMat, dx * (W / 2 - 0.06), (H - 0.05) / 2, dz * (D / 2 - 0.06)));
+  }
+  g.add(box(W - 0.12, 0.04, 0.03, legMat, 0, H - 0.08, -D / 2 + 0.07)); // back rail
+
+  // monitor
+  const screenCanvas = document.createElement('canvas');
+  const game = createLamplighter(screenCanvas, { attract: true });
+  const screenTex = new THREE.CanvasTexture(screenCanvas);
+  screenTex.colorSpace = THREE.SRGBColorSpace;
+  screenTex.magFilter = THREE.NearestFilter;
+  screenTex.minFilter = THREE.LinearFilter;
+  const monitor = new THREE.Group();
+  monitor.position.set(0.04, H, 0.03); // forward enough to clear the windowsill above
+  const bezel = mat(0x1d1c20, { roughness: 0.45 });
+  monitor.add(box(0.24, 0.015, 0.17, bezel, 0, 0.008, 0, { rounded: 0.006 }));    // foot
+  monitor.add(box(0.045, 0.2, 0.03, bezel, 0, 0.11, -0.03));                      // neck
+  monitor.add(box(0.88, 0.52, 0.035, bezel, 0, 0.42, 0, { rounded: 0.012 }));      // body
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.4725), new THREE.MeshBasicMaterial({ map: screenTex, toneMapped: false }));
+  screen.position.set(0, 0.425, 0.0185);
+  monitor.add(screen);
+  g.add(monitor);
+
+  // keyboard: a dark board with a grid of keycaps, and a mouse on a pad
+  const kc = document.createElement('canvas');
+  kc.width = 256; kc.height = 80;
+  const kctx = kc.getContext('2d');
+  kctx.fillStyle = '#1f1d22';
+  kctx.fillRect(0, 0, 256, 80);
+  for (let r = 0; r < 5; r++) {
+    for (let k = 0; k < 15; k++) {
+      kctx.fillStyle = r === 4 && k > 4 && k < 10 ? '#3a373f' : '#e9e2d6';
+      if (r === 4 && k > 4 && k < 10) { if (k === 5) kctx.fillRect(4 + 5 * 16.6, 4 + r * 15, 16.6 * 5 - 3, 12); continue; }
+      kctx.fillRect(4 + k * 16.6, 4 + r * 15, 13.6, 12);
+    }
+  }
+  const keyTex = new THREE.CanvasTexture(kc);
+  keyTex.colorSpace = THREE.SRGBColorSpace;
+  const keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.022, 0.15), [bezel, bezel, mat(0xffffff, { map: keyTex, roughness: 0.6 }), bezel, bezel, bezel]);
+  keyboard.position.set(0.0, H + 0.011, 0.24);
+  keyboard.castShadow = true;
+  g.add(keyboard);
+  g.add(box(0.3, 0.004, 0.24, mat(0x4a5d58, { roughness: 1 }), 0.46, H + 0.002, 0.2));
+  g.add(box(0.06, 0.03, 0.1, mat(0xe9e2d6, { roughness: 0.5 }), 0.47, H + 0.019, 0.21, { rounded: 0.014 }));
+  // a mug and a little plant to make it lived-in
+  g.add(cylinder(0.045, 0.04, 0.1, mat(0xd98c6b), -0.62, H + 0.05, 0.05, 14));
+
+  // PC tower under the right end, glass side facing the room
+  const pcCanvas = document.createElement('canvas');
+  pcCanvas.width = 128; pcCanvas.height = 256;
+  const pctx = pcCanvas.getContext('2d');
+  pctx.fillStyle = '#141318';
+  pctx.fillRect(0, 0, 128, 256);
+  const fan = (cx, cy) => {
+    const gr = pctx.createRadialGradient(cx, cy, 4, cx, cy, 30);
+    gr.addColorStop(0, 'rgba(255,190,120,0.9)');
+    gr.addColorStop(0.6, 'rgba(255,150,90,0.35)');
+    gr.addColorStop(1, 'rgba(255,150,90,0)');
+    pctx.fillStyle = gr;
+    pctx.fillRect(cx - 32, cy - 32, 64, 64);
+    pctx.strokeStyle = 'rgba(255,214,160,0.9)';
+    pctx.lineWidth = 3;
+    pctx.beginPath(); pctx.arc(cx, cy, 24, 0, Math.PI * 2); pctx.stroke();
+    pctx.fillStyle = '#2a2730';
+    pctx.beginPath(); pctx.arc(cx, cy, 6, 0, Math.PI * 2); pctx.fill();
+  };
+  fan(64, 70); fan(64, 140);
+  pctx.fillStyle = '#2f3a36'; pctx.fillRect(16, 190, 96, 40); // graphics card
+  pctx.fillStyle = 'rgba(255,190,120,0.8)'; pctx.fillRect(16, 226, 96, 3);
+  const pcTex = new THREE.CanvasTexture(pcCanvas);
+  pcTex.colorSpace = THREE.SRGBColorSpace;
+  const glass = new THREE.MeshStandardMaterial({ map: pcTex, emissive: 0xffffff, emissiveMap: pcTex, emissiveIntensity: 0.6, roughness: 0.2 });
+  const caseMat = mat(0x1d1c20, { roughness: 0.5 });
+  const tower = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.68, 0.56), [glass, caseMat, caseMat, caseMat, caseMat, caseMat]);
+  tower.position.set(W / 2 - 0.28, 0.35, -0.03);
+  tower.castShadow = true;
+  g.add(tower);
+  g.add(box(0.016, 0.016, 0.005, mat(0x111111, { emissive: 0xffc27a, emissiveIntensity: 1.4 }), W / 2 - 0.2, 0.62, 0.252)); // power light
+
+  return { group: g, screenTex, game, glass };
+}
+
+/**
+ * An upholstered swivel chair: a curved back that wraps around the seat with a
+ * half-moon cutout above the cushion, a thin oak rim under the seat and four
+ * splayed oak legs meeting at a hub. Built at the origin facing -z (toward the
+ * desk); the back is at +z.
+ */
+function buildChair() {
+  const g = new THREE.Group();
+  const velvet = fabric(0xd8d0c2, { bumpScale: 0.018, sheen: 0.85, sheenRoughness: 0.5, sheenColor: new THREE.Color(0xf7f1e6), side: THREE.DoubleSide });
+  const oak = M.oak;
+  const base = 0.6;      // top of the oak rim, where the upholstery starts
+  const cushion = 0.15;  // seat cushion thickness
+
+  // ---- splayed legs meeting at a hub under the seat
+  const hubY = base - 0.07;
+  g.add(cylinder(0.05, 0.045, 0.1, oak, 0, hubY, 0, 12));
+  const up = new THREE.Vector3(0, 1, 0);
+  for (let i = 0; i < 4; i++) {
+    const a = Math.PI / 4 + (i * Math.PI) / 2;
+    const top = new THREE.Vector3(Math.cos(a) * 0.035, hubY, Math.sin(a) * 0.035);
+    const foot = new THREE.Vector3(Math.cos(a) * 0.42, 0, Math.sin(a) * 0.42);
+    const dir = foot.clone().sub(top);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.019, dir.length(), 10), oak);
+    leg.position.copy(top).addScaledVector(dir, 0.5);
+    leg.quaternion.setFromUnitVectors(up, dir.clone().normalize().negate());
+    g.add(leg);
+  }
+
+  // ---- round oak rim and a plump round seat cushion with a soft, rolled edge
+  g.add(cylinder(0.37, 0.36, 0.035, oak, 0, base - 0.0175, 0, 48));
+  {
+    const Rs = 0.36, edge = 0.07; // cushion radius and the radius of its rolled edge
+    const prof = [new THREE.Vector2(0, 0)];
+    prof.push(new THREE.Vector2(Rs - edge, 0));
+    for (let i = 0; i <= 12; i++) {
+      const a = -Math.PI / 2 + (i / 12) * Math.PI; // around the edge, bottom to top
+      prof.push(new THREE.Vector2(Rs - edge + Math.cos(a) * edge, cushion / 2 + Math.sin(a) * (cushion / 2)));
+    }
+    // a gentle dome toward the middle, as if softly stuffed
+    for (let i = 1; i <= 6; i++) {
+      const r = (Rs - edge) * (1 - i / 6);
+      prof.push(new THREE.Vector2(r, cushion + 0.012 * Math.sin((i / 6) * Math.PI / 2)));
+    }
+    const seat = new THREE.Mesh(new THREE.LatheGeometry(prof, 64), velvet);
+    seat.position.y = base;
+    g.add(seat);
+  }
+
+  // ---- the wraparound back, swept around the seat as a thick rounded band.
+  // s runs along the band (arc length), y up from the rim; each cross-section is a
+  // stadium (outer face, rounded top, inner face, rounded bottom).
+  const R = 0.36, t = 0.08, thetaMax = 1.66;
+  const Wb = 2 * R * thetaMax;
+  const topH = 0.8, endH = cushion + 0.16;
+  const notchA = 0.2, notchH = 0.22; // the cutout above the cushion
+  const topAt = (sv) => {
+    const f = Math.min(1, Math.abs(sv) / (Wb / 2));
+    return endH + (topH - endH) * Math.sqrt(Math.max(0, 1 - Math.pow(f, 2.6)));
+  };
+  const bottomAt = (sv) => {
+    const q = Math.abs(sv) / notchA;
+    const arch = q < 1 ? cushion + notchH * Math.sqrt(1 - q * q) : 0;
+    const lift = cushion * (1 - THREE.MathUtils.smoothstep(Math.abs(sv), notchA, notchA + 0.05));
+    return Math.max(arch, lift);
+  };
+  const rc = t / 2, sideSteps = 10, capSteps = 8;
+  const loop = (y0, y1) => {
+    const pts = [];
+    y1 = Math.max(y1, y0 + 2 * rc + 0.001);
+    for (let k = 0; k < sideSteps; k++) pts.push([R + rc, y0 + rc + ((y1 - y0 - 2 * rc) * k) / sideSteps]);
+    for (let k = 0; k < capSteps; k++) { const a = (Math.PI * k) / capSteps; pts.push([R + rc * Math.cos(a), y1 - rc + rc * Math.sin(a)]); }
+    for (let k = 0; k < sideSteps; k++) pts.push([R - rc, y1 - rc - ((y1 - y0 - 2 * rc) * k) / sideSteps]);
+    for (let k = 0; k < capSteps; k++) { const a = Math.PI + (Math.PI * k) / capSteps; pts.push([R + rc * Math.cos(a), y0 + rc + rc * Math.sin(a)]); }
+    return pts;
+  };
+  const N = 90, P = 2 * sideSteps + 2 * capSteps;
+  const positions = [], uvs = [], index = [], loops = [];
+  for (let i = 0; i <= N; i++) {
+    const sv = -Wb / 2 + (Wb * i) / N;
+    const th = sv / R;
+    const pts = loop(bottomAt(sv), topAt(sv));
+    loops.push({ th, pts });
+    pts.forEach(([r, y], k) => {
+      positions.push(r * Math.sin(th), base + y, r * Math.cos(th));
+      uvs.push((i / N) * 4, (k / P) * 2);
+    });
+  }
+  for (let i = 0; i < N; i++) {
+    for (let k = 0; k < P; k++) {
+      const a = i * P + k, b = i * P + ((k + 1) % P), c = (i + 1) * P + k, d = (i + 1) * P + ((k + 1) % P);
+      index.push(a, c, b, b, c, d);
+    }
+  }
+  const bandGeo = new THREE.BufferGeometry();
+  bandGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  bandGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  bandGeo.setIndex(index);
+  bandGeo.computeVertexNormals();
+  g.add(new THREE.Mesh(bandGeo, velvet));
+  // close the two front ends of the band
+  for (const end of [loops[0], loops[N]]) {
+    const cap = [], capIdx = [];
+    const cy = end.pts.reduce((m, q) => m + q[1], 0) / P;
+    cap.push(R * Math.sin(end.th), base + cy, R * Math.cos(end.th));
+    for (const [r, y] of end.pts) cap.push(r * Math.sin(end.th), base + y, r * Math.cos(end.th));
+    for (let k = 0; k < P; k++) capIdx.push(0, 1 + k, 1 + ((k + 1) % P));
+    const capGeo = new THREE.BufferGeometry();
+    capGeo.setAttribute('position', new THREE.Float32BufferAttribute(cap, 3));
+    capGeo.setIndex(capIdx);
+    capGeo.computeVertexNormals();
+    g.add(new THREE.Mesh(capGeo, velvet));
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  return g;
 }
 
 // ---------------------------------------------------------------------------
@@ -664,7 +883,7 @@ let plantSeed = 99;
 const prnd = () => { plantSeed = (plantSeed * 16807) % 2147483647; return plantSeed / 2147483647; };
 
 /** Fiddle-leaf fig: a slim trunk with big violin-shaped leaves spiralling up. */
-function buildTallPlant(x, z) {
+function buildTallPlant(x, z, scale = 1) {
   const g = new THREE.Group();
   const pt = pot(0.34, 0.26, 0.62, M.pot, M.soil);
   g.add(pt);
@@ -701,6 +920,7 @@ function buildTallPlant(x, z) {
   const bud = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.12, 6), P.figLight);
   bud.position.copy(trunkCurve.getPoint(1)).add(new THREE.Vector3(0, 0.06, 0));
   g.add(bud);
+  g.scale.setScalar(scale);
   g.position.set(x, 0, z);
   return g;
 }
@@ -1294,20 +1514,35 @@ export function buildRoom() {
   group.add(shell.group);
   group.add(buildRug());
   group.add(buildBed());
-  const ns = buildNightstandAndLamp();
+  // bedside lamp on a slim nightstand between the bed head and the bookshelf
+  const ns = buildNightstandAndLamp(-1.23, -3.85 + 0.23);
   group.add(ns.group);
   const shelf = buildBookshelf();
   group.add(shelf);
+  // record cabinet along wall B, between the foot of the bed and the guitar, facing into the room
   const rp = buildRecordPlayer();
+  rp.group.position.set(-W_INNER + 0.285, 0, 0.45);
+  rp.group.rotation.y = Math.PI / 2;
   group.add(rp.group);
-  group.add(buildTallPlant(3.5, -2.55));
+  rp.group.updateMatrixWorld(true);
+  // the desk takes the old record-player spot under the window, with a chair pulled up
+  const desk = buildDesk();
+  desk.group.position.set(1.7, 0, -W_INNER + 0.36);
+  group.add(desk.group);
+  const chair = buildChair();
+  chair.position.set(2.2, 0, -2.55);
+  chair.rotation.y = 1.15; // swivelled aside, as if someone just stood up; shows its profile and leaves the screen in view
+  group.add(chair);
+  // the fiddle-leaf fig stands beside the desk's right end, in front of the window's right curtain
+  group.add(buildTallPlant(3.45, -3.4, 0.62)); // a younger, smaller fig tucked against the wall so the monitor stays in view
   group.add(buildMonstera(-3.3, 3.2));
   group.add(buildSucculent(2.55, 1.92, -3.66, 0.9)); // on the windowsill
   group.add(buildGallery());
   const sl = buildStringLights();
   group.add(sl.group);
-  // on the wall left of the window, above the record player and below the curtain hem
-  const sw = buildLightSwitch(0.84, 1.28, -3.835);
+  // on the wall left of the window, above the desk and below the curtain hem
+  // just right of the bookshelf, beside the desk's left end; low enough that the sill never hides it
+  const sw = buildLightSwitch(0.7, 1.4, -3.835);
   group.add(sw.group);
   group.add(buildGuitar());
   group.add(buildExtras());
@@ -1366,6 +1601,15 @@ export function buildRoom() {
     rp.arm.rotation.y += (targetArm - rp.arm.rotation.y) * (1 - Math.exp(-dt * 3));
     notes.update(dt, player.playing, player.viewScale);
 
+    // the monitor plays its game at a gentle 15 fps
+    screenTimer += dt;
+    if (screenTimer > 1 / 15) {
+      desk.game.step(screenTimer);
+      desk.screenTex.needsUpdate = true;
+      screenTimer = 0;
+    }
+    desk.glass.emissiveIntensity = 0.25 + 0.9 * k;
+
     // sashes swing on an eased curve; the breeze builds once they are open
     const target = windowState.open ? 1 : 0;
     windowState.amount += (target - windowState.amount) * (1 - Math.exp(-dt * 3.2));
@@ -1380,19 +1624,22 @@ export function buildRoom() {
   }
   let elapsed = 0;
 
+  let screenTimer = 0;
   const player = { playing: false, spin: 0, viewScale: 1 };
   const lampState = { manual: false, step: 0, current: 0 };
   const lightsState = { manual: false, mode: 0, a: 1, b: 1 };
   const windowState = { open: false, amount: 0, wind: 0 };
   const SASH_OPEN = THREE.MathUtils.degToRad(80);
   rp.arm.rotation.y = ARM_REST;
-  const notes = createNotes(rp.vinyl.position.clone());
+  const notes = createNotes(rp.vinyl.getWorldPosition(new THREE.Vector3()));
   group.add(notes.group);
 
   return {
     group,
     update,
     recordPlayer: rp.group,
+    desk: desk.group,
+    chair,
     bookshelf: shelf,
     // the window frame, sashes, glass and curtains all respond to clicks
     windowTargets: [shell.hitPane, ...shell.sashes, ...shell.curtains.map((c) => c.mesh)],

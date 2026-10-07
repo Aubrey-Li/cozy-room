@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { makeLeafTexture } from './textures.js';
+import { makeLeafTexture, makeGlowTexture } from './textures.js';
 import { leafGeometry, profiles, leafMaterial, placeLeaf } from './foliage.js';
 
 export const PLANET_R = 22;
@@ -425,4 +425,81 @@ export function buildPlanet(wind) {
   group.add(buildStones());
   group.add(buildRose(-6.6, 2.4));
   return group;
+}
+
+/**
+ * A little iron lamp post on the meadow. Like the lights indoors, it glows warm
+ * after dusk and switches off by day. Returns { group, update(state, time) }.
+ */
+export function buildLampPost(dx, dz) {
+  const g = new THREE.Group();
+  const iron = new THREE.MeshStandardMaterial({ color: 0x2c2a31, roughness: 0.55, metalness: 0.5 });
+  const add = (geo, y, mat = iron) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.y = y;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    g.add(m);
+    return m;
+  };
+  // base, post and a couple of decorative rings
+  add(new THREE.CylinderGeometry(0.2, 0.26, 0.18, 12), 0.09);
+  add(new THREE.CylinderGeometry(0.11, 0.16, 0.3, 12), 0.33);
+  add(new THREE.CylinderGeometry(0.045, 0.055, 2.2, 10), 1.55);
+  add(new THREE.TorusGeometry(0.075, 0.02, 6, 16), 0.9).rotation.x = Math.PI / 2;
+  add(new THREE.TorusGeometry(0.07, 0.02, 6, 16), 2.55).rotation.x = Math.PI / 2;
+
+  // lantern: a small iron frame around warm glass, with a pointed cap
+  const LY = 2.92; // lantern centre
+  add(new THREE.CylinderGeometry(0.14, 0.08, 0.1, 4), LY - 0.27).rotation.y = Math.PI / 4;
+  const glass = new THREE.MeshStandardMaterial({
+    color: 0xfff1d6,
+    emissive: 0xffbe6e,
+    emissiveIntensity: 0,
+    roughness: 0.3,
+    transparent: true,
+    opacity: 0.85,
+  });
+  const pane = add(new THREE.BoxGeometry(0.26, 0.4, 0.26), LY, glass);
+  pane.castShadow = false;
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.44, 0.03), iron);
+    bar.position.set(x * 0.135, LY, z * 0.135);
+    bar.castShadow = true;
+    g.add(bar);
+  }
+  const cap = add(new THREE.ConeGeometry(0.25, 0.24, 4), LY + 0.32);
+  cap.rotation.y = Math.PI / 4;
+  add(new THREE.SphereGeometry(0.045, 10, 8), LY + 0.47);
+
+  // the light it throws on the grass, plus a soft halo around the glass
+  const light = new THREE.PointLight(0xffc27a, 0, 9, 1.7);
+  light.position.y = LY;
+  g.add(light);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: makeGlowTexture(),
+    color: 0xffd9a0,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  }));
+  halo.scale.setScalar(1.8);
+  halo.position.y = LY;
+  g.add(halo);
+
+  const { position, quaternion } = onPlanet(dx, dz, -0.02);
+  g.position.copy(position);
+  g.quaternion.copy(quaternion);
+
+  function update(state, time) {
+    const k = state.indoor; // same dusk-to-dawn curve as the lights in the room
+    const flicker = 1 + 0.03 * Math.sin(time * 7.3) * Math.sin(time * 3.1);
+    light.intensity = 14 * k * flicker;
+    glass.emissiveIntensity = 2.4 * k * flicker;
+    halo.material.opacity = 0.75 * k;
+    light.visible = k > 0.01;
+  }
+  update({ indoor: 0 }, 0);
+  return { group: g, update };
 }

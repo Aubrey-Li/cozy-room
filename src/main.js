@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from './sky.js';
-import { buildPlanet } from './planet.js';
+import { buildPlanet, buildLampPost } from './planet.js';
 import { buildRoom } from './room.js';
 import { Fireflies } from './fireflies.js';
 import { createWind } from './wind.js';
 import { createMusicPanel } from './music.js';
 import { createBook } from './book.js';
+import { createGameOverlay } from './game.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam } from './time.js';
 
 // ---------------------------------------------------------------------------
@@ -129,6 +130,9 @@ scene.add(camera); // needed so sprites parented to the camera render
 const sky = new Sky(camera);
 const wind = createWind();
 scene.add(buildPlanet(wind));
+// a lamp post out on the meadow, a little to the right of the house
+const lampPost = buildLampPost(6.4, -0.8);
+scene.add(lampPost.group);
 const room = buildRoom();
 scene.add(room.group);
 const fireflies = new Fireflies(110);
@@ -248,9 +252,11 @@ const pointerNdc = new THREE.Vector2();
 
 // things in the room you can click, checked against whatever the ray hits first
 const book = createBook();
+const gameWindow = createGameOverlay();
 const clickables = [
   { roots: [room.recordPlayer], action: () => music.open() },
   { roots: [room.bookshelf], action: (at) => book.open(at) },
+  { roots: [room.desk, room.chair], action: (at) => gameWindow.open(at) },
   { roots: room.windowTargets, action: () => room.toggleWindow() },
   { roots: [room.lamp], action: () => room.cycleLamp() },
   { roots: [room.lightSwitch], action: () => room.cycleStringLights() },
@@ -293,7 +299,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, room, music, book, THREE };
+  window.__cozy = { camera, room, music, book, gameWindow, THREE };
 }
 
 function updateHover() {
@@ -367,7 +373,7 @@ function applyLighting(s) {
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
   // the scene sits frozen and blurred behind the book, so skip rendering it while reading
-  if (book.isOpen) return;
+  if (book.isOpen || gameWindow.isOpen) return;
   const t = clock.elapsedTime;
   const hours = currentHours();
   computeSky(hours, state);
@@ -381,6 +387,7 @@ function frame() {
   sky.update(state, t, camera);
   room.setViewZoom(camera.zoom);
   room.update(state, dt, t);
+  lampPost.update(state, t);
   wind.update(t);
   fireflies.update(t, state.night);
 
