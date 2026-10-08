@@ -102,7 +102,10 @@ export class Sky {
     this.sun.scale.setScalar(2.4);
     this.sunGlow = new THREE.Sprite(spriteMat(makeGlowTexture(), { blending: THREE.AdditiveBlending, opacity: 0.8 }));
     this.sunGlow.scale.setScalar(9);
-    this.moon = new THREE.Sprite(spriteMat(makeMoonTexture()));
+    // additive, so the moon's dark side vanishes against a day sky and a new moon never blots out the sun
+    this.moonTex = makeMoonTexture();
+    this.moon = new THREE.Sprite(spriteMat(this.moonTex.texture, { blending: THREE.AdditiveBlending }));
+    this.drawnPhase = -1;
     this.moon.scale.setScalar(2.6);
 
     this.baseScale = new Map([[this.sun, 2.4], [this.sunGlow, 9], [this.moon, 2.6]]);
@@ -155,15 +158,24 @@ export class Sky {
     this.sun.position.set(p.x, p.y, this.depth);
     this.sunGlow.position.set(p.x, p.y, this.depth + 1);
     this.moon.position.set(
-      this.orbitCenter.x - this.orbitRadius * Math.cos(state.theta),
-      this.orbitCenter.y - this.orbitRadius * Math.sin(state.theta),
+      this.orbitCenter.x + this.orbitRadius * Math.cos(state.moonTheta),
+      this.orbitCenter.y + this.orbitRadius * Math.sin(state.moonTheta),
       this.depth,
     );
+    // repaint the phase only when it has visibly moved
+    if (Math.abs(state.moonPhase - this.drawnPhase) > 0.002) {
+      this.moonTex.draw(state.moonPhase);
+      this.drawnPhase = state.moonPhase;
+    }
+    // turn the lit limb toward the sun, wherever the two are in the sky
+    this.moon.material.rotation = Math.atan2(p.y - this.moon.position.y, p.x - this.moon.position.x);
 
     const sunVis = THREE.MathUtils.smoothstep(state.elev, -0.12, 0.0);
     this.sun.material.opacity = sunVis;
     this.sunGlow.material.opacity = sunVis * (0.35 + 0.65 * state.glow);
-    this.moon.material.opacity = THREE.MathUtils.smoothstep(-state.elev, -0.12, 0.05) * (0.55 + 0.45 * state.night);
+    // the moon keeps its own hours: a pale ghost by day, bright once the sky darkens
+    const moonUp = THREE.MathUtils.smoothstep(Math.sin(state.moonTheta), -0.1, 0.04);
+    this.moon.material.opacity = moonUp * (0.35 + 0.65 * state.night);
   }
 
   render(renderer) {

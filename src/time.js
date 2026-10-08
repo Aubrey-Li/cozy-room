@@ -52,9 +52,15 @@ export function parseTimeParam(str) {
 }
 
 // ---------------------------------------------------------------------------
-// Sky state derived from the hour. Sunrise is fixed at 06:00 and sunset at
-// 18:00 so the sun is at its zenith at noon and the moon at midnight.
+// Sky state derived from the sun angle. theta runs 0 at sunrise, PI/2 at solar
+// noon, PI at sunset and round the far side of the planet through the night;
+// astro.js maps the local clock onto it using the real sunrise and sunset.
 // ---------------------------------------------------------------------------
+
+/** The hour on an idealised 06:00-sunrise, 18:00-sunset clock for a sun angle. */
+export function solarHours(theta) {
+  return ((6 + (theta / (Math.PI * 2)) * 24) % 24 + 24) % 24;
+}
 
 const smoothstep = (a, b, x) => {
   const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
@@ -113,6 +119,10 @@ export function createSkyState() {
     glow: 0,           // horizon glow around the sun
     sunIntensity: 0,
     moonIntensity: 0,
+    moonTheta: Math.PI, // the moon's angle on the same circle as the sun
+    moonPhase: 0.5,     // 0 new, 0.5 full
+    moonLit: 1,         // fraction of the disc that is lit
+    moonUp: 1,          // 0 while the moon is below the horizon
     sunColor: new THREE.Color(),
     glowColor: new THREE.Color(),
     sky: palette({ top: 0, horizon: 0, bottom: 0, hemiSky: 0, hemiGround: 0, hemiI: 0 }),
@@ -120,9 +130,8 @@ export function createSkyState() {
   };
 }
 
-export function computeSky(hours, s) {
+export function computeSky(hours, s, theta = ((hours - 6) / 24) * Math.PI * 2) {
   s.hours = hours;
-  const theta = ((hours - 6) / 24) * Math.PI * 2;
   const e = Math.sin(theta);
   const c = Math.cos(theta);
   s.theta = theta;
@@ -150,6 +159,9 @@ export function computeSky(hours, s) {
   s.sunColor.copy(SUN_LOW).lerp(SUN_HIGH, warm);
   s.glowColor.copy(GLOW_LOW).lerp(GLOW_HIGH, warm);
   s.sunIntensity = Math.pow(THREE.MathUtils.clamp(e, 0, 1), 0.55) * 2.6;
-  s.moonIntensity = smoothstep(0.0, 0.35, -e) * 0.5;
+  // night light: a floor of starlight so the meadow stays readable on moonless
+  // nights, plus moonlight that needs the moon up and scales with how much is lit
+  s.moonUp = smoothstep(0.0, 0.3, Math.sin(s.moonTheta));
+  s.moonIntensity = smoothstep(0.0, 0.35, -e) * (0.3 + 0.32 * s.moonUp * s.moonLit);
   return s;
 }

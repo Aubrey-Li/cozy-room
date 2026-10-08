@@ -1,27 +1,16 @@
 import * as THREE from 'three';
-import { makeLeafTexture, makeGlowTexture } from './textures.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeLeafTexture, makeGlowTexture, makeBlossomTexture } from './textures.js';
 import { leafGeometry, profiles, leafMaterial, placeLeaf } from './foliage.js';
+import { PLANET_R, PLANET_CENTER, onPlanet } from './planet-math.js';
+import { inPond } from './pond.js';
 
-export const PLANET_R = 22;
-export const PLANET_CENTER = new THREE.Vector3(0, -PLANET_R, 0);
+export { PLANET_R, PLANET_CENTER, onPlanet };
 
-const _dir = new THREE.Vector3();
+/** Where the rose under its glass cloche stands. */
+export const ROSE = { dx: -6.6, dz: 2.4 };
+
 const _up = new THREE.Vector3(0, 1, 0);
-
-/**
- * Map a flat offset (dx, dz) from the north pole onto the planet surface.
- * Returns the world position (height h above the surface) and a quaternion
- * that aligns local +Y with the surface normal.
- */
-export function onPlanet(dx, dz, h = 0, outPos = new THREE.Vector3(), outQuat = new THREE.Quaternion()) {
-  const d = Math.hypot(dx, dz);
-  const phi = d / PLANET_R;
-  if (d < 1e-6) _dir.set(0, 1, 0);
-  else _dir.set(Math.sin(phi) * (dx / d), Math.cos(phi), Math.sin(phi) * (dz / d));
-  outPos.copy(PLANET_CENTER).addScaledVector(_dir, PLANET_R + h);
-  outQuat.setFromUnitVectors(_up, _dir);
-  return { position: outPos, quaternion: outQuat, normal: _dir.clone() };
-}
 
 const HOUSE_HALF = 4.9;
 const insideHouse = (dx, dz) => Math.abs(dx) < HOUSE_HALF && Math.abs(dz) < HOUSE_HALF;
@@ -73,6 +62,7 @@ function buildGrass(wind) {
   const s = new THREE.Vector3();
   const col = new THREE.Color();
   const shades = [0x5fa84a, 0x76bf5c, 0x4d8f3c, 0x8ccb6a, 0x63a34f];
+  const blades = [];
   let i = 0;
   let guard = 0;
   while (i < count && guard++ < count * 10) {
@@ -80,7 +70,7 @@ function buildGrass(wind) {
     const d = 4.8 + Math.sqrt(rnd()) * 22;
     const dx = Math.cos(ang) * d;
     const dz = Math.sin(ang) * d;
-    if (insideHouse(dx, dz)) continue;
+    if (insideHouse(dx, dz) || inPond(dx, dz, -0.1)) continue;
     onPlanet(dx, dz, -0.03, p, q);
     yaw.setFromAxisAngle(_up, rnd() * Math.PI * 2);
     q.multiply(yaw);
@@ -90,12 +80,13 @@ function buildGrass(wind) {
     mesh.setMatrixAt(i, m);
     col.setHex(shades[Math.floor(rnd() * shades.length)]);
     mesh.setColorAt(i, col);
+    blades.push({ p: p.clone(), q: q.clone(), s: s.clone(), color: col.clone(), r: rnd() });
     i++;
   }
   mesh.count = i;
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  return mesh;
+  return { mesh, blades };
 }
 
 function buildFlowers() {
@@ -115,6 +106,7 @@ function buildFlowers() {
   const s = new THREE.Vector3(1, 1, 1);
   const col = new THREE.Color();
   const palette = [0xffffff, 0xffd166, 0xff8fab, 0xf4a261, 0xcdb4db, 0xff6b6b];
+  const blooms = [];
   let i = 0;
   let guard = 0;
   while (i < count && guard++ < count * 10) {
@@ -122,7 +114,7 @@ function buildFlowers() {
     const d = 5.4 + Math.sqrt(rnd()) * 18;
     const dx = Math.cos(ang) * d;
     const dz = Math.sin(ang) * d;
-    if (insideHouse(dx, dz)) continue;
+    if (insideHouse(dx, dz) || inPond(dx, dz, 0.1)) continue;
     onPlanet(dx, dz, 0, p, q);
     const sc = 0.8 + rnd() * 0.5;
     s.setScalar(sc);
@@ -131,13 +123,14 @@ function buildFlowers() {
     stems.setMatrixAt(i, m);
     col.setHex(palette[Math.floor(rnd() * palette.length)]);
     petals.setColorAt(i, col);
+    blooms.push({ p: p.clone(), q: q.clone(), sc, r: rnd() });
     i++;
   }
   petals.count = stems.count = i;
   petals.castShadow = true;
   const g = new THREE.Group();
   g.add(petals, stems);
-  return g;
+  return { group: g, petals, stems, blooms };
 }
 
 let treeLeafMaterial = null;
@@ -157,30 +150,49 @@ function getLeafMaterial(wind) {
   return { material: treeLeafMaterial, depth: treeLeafDepth };
 }
 
+/**
+ * Bark shared by every tree. In winter, snow settles on the upper side of each
+ * limb and twig: those faces whiten and swell a little, so bare branches read as
+ * snow-laden. `BARK_SNOW.value` runs 0..1.
+ */
+export const BARK_SNOW = { value: 0 };
+let barkMaterial = null;
+function getBarkMaterial() {
+  if (barkMaterial) return barkMaterial;
+  barkMaterial = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 });
+  barkMaterial.onBeforeCompile = (shader) => {
+    shader.uniforms.uBarkSnow = BARK_SNOW;
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uBarkSnow;\nvarying float vSnowTop;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        // the tree's geometry is built in its own upright frame, so normal.y is "faces the sky"
+        vSnowTop = smoothstep(0.1, 0.65, normal.y) * uBarkSnow;
+        transformed.y += vSnowTop * 0.045;`);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vSnowTop;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.96, 0.97, 0.99), vSnowTop);`);
+  };
+  barkMaterial.customProgramCacheKey = () => 'bark-snow';
+  return barkMaterial;
+}
+
+/** A tapered cylinder from a to b, in the tree's own frame. */
+function limb(a, b, r0, r1, sides = 6) {
+  const dir = b.clone().sub(a);
+  const len = dir.length();
+  const geo = new THREE.CylinderGeometry(r1, r0, len, sides, 1);
+  geo.translate(0, len / 2, 0);
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(_up, dir.normalize()));
+  geo.translate(a.x, a.y, a.z);
+  return geo;
+}
+
 function buildTree(dx, dz, scale, wind) {
   const g = new THREE.Group();
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 });
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.3, 2.6, 7), trunkMat);
-  trunk.position.y = 1.3;
-  trunk.castShadow = true;
-  g.add(trunk);
-  // a few branches reaching into the canopy
-  const branches = [
-    [0.9, 2.5, 0.3], [-0.8, 2.6, -0.4], [0.2, 2.3, -0.9], [-0.3, 2.4, 0.9],
-  ];
-  for (const [bx, by, bz] of branches) {
-    const from = new THREE.Vector3(0, 2.0, 0);
-    const to = new THREE.Vector3(bx, by, bz);
-    const dir = to.clone().sub(from);
-    const len = dir.length();
-    const b = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.1, len, 5), trunkMat);
-    b.position.copy(from).addScaledVector(dir, 0.5);
-    b.quaternion.setFromUnitVectors(_up, dir.normalize());
-    b.castShadow = true;
-    g.add(b);
-  }
+  const bark = getBarkMaterial();
 
-  // canopy: dark cores so the crown is not hollow, plus hundreds of leaf cards
+  // canopy layout: the crown is a cluster of rounded blobs
   const blobs = [
     [0, 3.0, 0, 1.45],
     [0.9, 2.5, 0.3, 1.0],
@@ -189,13 +201,71 @@ function buildTree(dx, dz, scale, wind) {
     [-0.3, 2.4, 0.9, 0.85],
     [0.1, 3.9, 0.1, 0.9],
   ];
-  const coreMat = new THREE.MeshStandardMaterial({ color: 0x2f5f2a, roughness: 1 });
+
+  // a branching skeleton that shows once the leaves are gone: a limb into each
+  // blob, twigs fanning out toward its surface, and little sprigs off the twigs
+  const parts = [limb(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 2.6, 0), 0.3, 0.16, 8)];
+  const sprigEnds = []; // where blossoms gather
+  const v = new THREE.Vector3();
+  for (const [x, y, z, r] of blobs) {
+    const centre = new THREE.Vector3(x, y, z);
+    const base = new THREE.Vector3(0, Math.min(2.5, 1.9 + rnd() * 0.5), 0);
+    const top = centre.y > 3.5;
+    parts.push(limb(top ? new THREE.Vector3(0, 2.55, 0) : base, centre, top ? 0.12 : 0.11, 0.06));
+    const twigs = Math.round(5 + r * 4);
+    for (let t = 0; t < twigs; t++) {
+      // mostly outward and upward, as branches reach for the light
+      v.set(rnd() * 2 - 1, rnd() * 1.4 - 0.25, rnd() * 2 - 1).normalize();
+      const start = centre.clone().addScaledVector(v, r * 0.1);
+      const end = centre.clone().addScaledVector(v, r * (0.68 + rnd() * 0.22));
+      parts.push(limb(start, end, 0.045, 0.018, 5));
+      sprigEnds.push(end.clone(), start.clone().lerp(end, 0.6));
+      for (let k = 0; k < 2; k++) {
+        const from = start.clone().lerp(end, 0.45 + rnd() * 0.35);
+        const d2 = v.clone().add(new THREE.Vector3(rnd() - 0.5, rnd() * 0.8, rnd() - 0.5)).normalize();
+        const to = from.clone().addScaledVector(d2, 0.25 + rnd() * 0.25);
+        parts.push(limb(from, to, 0.018, 0.008, 4));
+        sprigEnds.push(to);
+      }
+    }
+  }
+  const skeleton = new THREE.Mesh(mergeGeometries(parts), bark);
+  skeleton.castShadow = true;
+  skeleton.receiveShadow = true;
+  g.add(skeleton);
+
+  // blossoms: little five-petalled flowers clustered along the twigs
+  const blossomGeo = new THREE.PlaneGeometry(0.2, 0.2);
+  const blossomMat = new THREE.MeshStandardMaterial({
+    map: makeBlossomTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8,
+    emissive: 0x5a2a38, emissiveIntensity: 0.35,
+  });
+  const perSpot = 9;
+  const blossoms = new THREE.InstancedMesh(blossomGeo, blossomMat, sprigEnds.length * perSpot);
+  blossoms.castShadow = true;
+  const blossomData = [];
+  {
+    const e = new THREE.Euler();
+    const bq = new THREE.Quaternion();
+    for (const at of sprigEnds) {
+      for (let k = 0; k < perSpot; k++) {
+        const p2 = at.clone().add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.34));
+        bq.setFromEuler(e.set(rnd() * 6.28, rnd() * 6.28, rnd() * 6.28));
+        blossomData.push({ pos: p2, q: bq.clone(), s: 0.75 + rnd() * 0.6, r: rnd(), r2: rnd() });
+      }
+    }
+  }
+
+  // canopy: dark cores so the crown is not hollow, plus hundreds of leaf cards
+  const coreMat = new THREE.MeshStandardMaterial({ color: 0x2f5f2a, roughness: 1 });  // keeps a full crown from looking hollow
+  const cores = [];
   let total = 0;
   for (const [x, y, z, r] of blobs) {
     const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.62, 8, 6), coreMat);
     core.position.set(x, y, z);
     core.castShadow = true;
     g.add(core);
+    cores.push(core);
     total += Math.round(r * r * 160);
   }
 
@@ -212,6 +282,7 @@ function buildTree(dx, dz, scale, wind) {
   const dir = new THREE.Vector3();
   const col = new THREE.Color();
   const greens = [0x4f9a3a, 0x5fae46, 0x3f8230, 0x79bf58, 0x8fc96a, 0x6aa84a];
+  const leafData = [];
   let i = 0;
   for (const [x, y, z, r] of blobs) {
     const n = Math.round(r * r * 160);
@@ -229,23 +300,27 @@ function buildTree(dx, dz, scale, wind) {
       col.setHex(greens[Math.floor(rnd() * greens.length)]);
       if (rnd() < 0.06) col.setHex(0xd9c25a); // the odd yellowing leaf
       leaves.setColorAt(i, col);
+      // up: how much the leaf faces the sky (snow lands there first); r, r2: per-leaf randomness
+      leafData.push({ color: col.clone(), up: dir.y, r: rnd(), r2: rnd(), pos: pos.clone(), q: q.clone(), s: s2 });
     }
   }
   leaves.count = i;
   leaves.castShadow = true;
   leaves.receiveShadow = true;
   g.add(leaves);
+  g.add(blossoms);
 
   const { position, quaternion } = onPlanet(dx, dz, -0.1);
   g.position.copy(position);
   g.quaternion.copy(quaternion);
   g.scale.setScalar(scale);
-  return g;
+  return { group: g, leaves, leafData, coreMat, cores, blobs, blossoms, blossomData };
 }
 
 function buildStones() {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: 0x9c9a90, roughness: 1, flatShading: true });
+  g.userData.material = mat;
   const geo = new THREE.CylinderGeometry(0.36, 0.4, 0.12, 7);
   const pts = [
     [3.9, 4.6], [4.7, 5.5], [5.6, 6.2], [6.6, 6.9], [7.5, 7.9], [8.3, 9.0],
@@ -414,17 +489,24 @@ function buildRose(dx, dz) {
   return g;
 }
 
+/**
+ * The planet and everything growing on it. Returns the group plus handles the
+ * seasons use to recolour, bury and bring things back.
+ */
 export function buildPlanet(wind) {
   const group = new THREE.Group();
-  group.add(buildGround());
-  group.add(buildGrass(wind));
-  group.add(buildFlowers());
-  group.add(buildTree(-8.5, 6.5, 1.1, wind));
-  group.add(buildTree(9.5, -3.5, 0.85, wind));
-  group.add(buildTree(-3.0, 11.5, 0.7, wind));
-  group.add(buildStones());
-  group.add(buildRose(-6.6, 2.4));
-  return group;
+  const ground = buildGround();
+  const grass = buildGrass(wind);
+  const flowers = buildFlowers();
+  const trees = [
+    buildTree(-8.5, 6.5, 1.1, wind),
+    buildTree(9.5, -3.5, 0.85, wind),
+    buildTree(-3.0, 11.5, 0.7, wind),
+  ];
+  const stones = buildStones();
+  group.add(ground, grass.mesh, flowers.group, stones, buildRose(ROSE.dx, ROSE.dz));
+  for (const t of trees) group.add(t.group);
+  return { group, ground, grass, flowers, trees, stones };
 }
 
 /**

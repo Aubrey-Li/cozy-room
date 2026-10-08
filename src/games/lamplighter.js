@@ -305,7 +305,13 @@ export function createLamplighter(display, { attract = false, onEvent = () => {}
     const p = S.planet;
     if (n?.kind === 'talk') say(p.def.before, finishTalk);
     else if (n?.kind === 'light') { S.anim = { t: 0, dur: 2.4, from: S.glow }; emit('lightStart'); }
-    else if (n?.kind === 'go') { S.travel = { t: 0, next: S.stop + 1 }; S.scene = 'travel'; emit('travel'); }
+    else if (n?.kind === 'go') {
+      // the hop flies left to right, so face that way rather than the way you walked up
+      S.facing = 1;
+      S.travel = { t: 0, next: S.stop + 1 };
+      S.scene = 'travel';
+      emit('travel');
+    }
     else if (n?.kind === 'hold') { /* handled while held */ }
     else if (S.jumpY <= 0.01) {
       S.vy = 118 * (0.32 + 0.68 * S.glow); // a light bloop hops high; a dim one barely leaves the ground

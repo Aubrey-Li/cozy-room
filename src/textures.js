@@ -40,35 +40,62 @@ export const makeGlowTexture = () =>
     [1, 'rgba(255,180,100,0)'],
   ]);
 
+/**
+ * The moon, lit for a phase. Returns the texture and a draw(phase) that
+ * repaints it: phase 0 is new, 0.5 full. The lit limb is drawn facing +x;
+ * the sky turns the sprite so that limb points at the sun. The unlit side
+ * keeps a faint earthshine so a crescent still reads as a disc.
+ */
 export function makeMoonTexture(size = 256) {
   const c = canvas(size, size);
   const ctx = c.getContext('2d');
+  const tex = srgb(new THREE.CanvasTexture(c));
   const r = size * 0.36;
   const cx = size / 2;
   const cy = size / 2;
-  // soft halo
-  const halo = ctx.createRadialGradient(cx, cy, r * 0.9, cx, cy, size / 2);
-  halo.addColorStop(0, 'rgba(210,220,255,0.35)');
-  halo.addColorStop(1, 'rgba(210,220,255,0)');
-  ctx.fillStyle = halo;
-  ctx.fillRect(0, 0, size, size);
-  // disc
-  const disc = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.3, r * 0.1, cx, cy, r);
-  disc.addColorStop(0, '#fbfcff');
-  disc.addColorStop(0.7, '#dfe5fa');
-  disc.addColorStop(1, '#b9c3e6');
-  ctx.fillStyle = disc;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-  // a few craters
-  ctx.fillStyle = 'rgba(150,160,200,0.35)';
-  for (const [dx, dy, cr] of [[-0.3, 0.15, 0.16], [0.25, -0.25, 0.11], [0.2, 0.35, 0.09], [-0.1, -0.45, 0.07]]) {
-    ctx.beginPath();
-    ctx.arc(cx + dx * r, cy + dy * r, cr * r, 0, Math.PI * 2);
-    ctx.fill();
+  const craters = [[-0.3, 0.15, 0.16], [0.25, -0.25, 0.11], [0.2, 0.35, 0.09], [-0.1, -0.45, 0.07], [0.5, 0.1, 0.08], [-0.55, -0.2, 0.06]];
+  const img = ctx.createImageData(size, size);
+
+  function draw(phase = 0.5) {
+    const a = phase * Math.PI * 2;
+    // direction of sunlight in the moon's view frame (+x toward the sun, +z toward us)
+    const lx = Math.abs(Math.sin(a));
+    const lz = -Math.cos(a);
+    const lit = (1 - Math.cos(a)) / 2;
+    const d = img.data;
+    for (let py = 0; py < size; py++) {
+      for (let px = 0; px < size; px++) {
+        const x = (px + 0.5 - cx) / r;
+        const y = (py + 0.5 - cy) / r;
+        const rr = x * x + y * y;
+        const o = (py * size + px) * 4;
+        if (rr > 1) {
+          // soft halo, brighter the fuller the moon
+          const t = Math.max(0, 1 - (Math.sqrt(rr) - 1) / ((size / 2 - r) / r));
+          d[o] = 210; d[o + 1] = 220; d[o + 2] = 255;
+          d[o + 3] = 255 * 0.32 * t * t * (0.15 + 0.85 * lit);
+          continue;
+        }
+        const z = Math.sqrt(1 - rr);
+        let crater = 0;
+        for (const [qx, qy, qr] of craters) {
+          const e = Math.hypot(x - qx, y - qy) / qr;
+          if (e < 1) crater = Math.max(crater, 1 - e * e);
+        }
+        const tone = 1 - 0.18 * crater - 0.12 * rr; // craters and limb darkening
+        const sun = Math.min(1, Math.max(0, (x * lx + z * lz + 0.04) / 0.12)); // soft terminator
+        const earthshine = 0.16;
+        const k = (earthshine + (1 - earthshine) * sun) * tone;
+        d[o] = 251 * k; d[o + 1] = 252 * k; d[o + 2] = 255 * k;
+        // the dark side is mostly transparent so the night sky shows through it
+        d[o + 3] = 255 * Math.min(1, 0.42 + sun);
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    tex.needsUpdate = true;
   }
-  return srgb(new THREE.CanvasTexture(c));
+  draw();
+  return { texture: tex, draw };
 }
 
 /** Warm wooden plank floor. */
@@ -362,6 +389,54 @@ export function makeLeafTexture(size = 128) {
     ctx.moveTo(cx, y);
     ctx.lineTo(cx - size * 0.28, y - size * 0.1);
     ctx.stroke();
+  }
+  return srgb(new THREE.CanvasTexture(c));
+}
+
+/** A single cherry-blossom petal with its little notch, tinted per instance. */
+export function makePetalTexture(size = 64) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const cx = size / 2;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.moveTo(cx, size * 0.95);
+  ctx.bezierCurveTo(size * 0.02, size * 0.6, size * 0.12, size * 0.08, cx - size * 0.1, size * 0.1);
+  ctx.lineTo(cx, size * 0.2);
+  ctx.lineTo(cx + size * 0.1, size * 0.1);
+  ctx.bezierCurveTo(size * 0.88, size * 0.08, size * 0.98, size * 0.6, cx, size * 0.95);
+  ctx.fill();
+  const g = ctx.createRadialGradient(cx, size * 0.92, 0, cx, size * 0.92, size * 0.5);
+  g.addColorStop(0, 'rgba(230,150,175,0.6)');
+  g.addColorStop(1, 'rgba(230,150,175,0)');
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return srgb(new THREE.CanvasTexture(c));
+}
+
+/** A little five-petalled blossom with a darker heart, tinted per instance. */
+export function makeBlossomTexture(size = 64) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const cx = size / 2;
+  ctx.fillStyle = '#ffffff';
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    ctx.beginPath();
+    ctx.ellipse(cx + Math.cos(a) * size * 0.2, cx + Math.sin(a) * size * 0.2, size * 0.17, size * 0.13, a, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  const heart = ctx.createRadialGradient(cx, cx, 0, cx, cx, size * 0.2);
+  heart.addColorStop(0, 'rgba(200,90,120,0.9)');
+  heart.addColorStop(1, 'rgba(200,90,120,0)');
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = heart;
+  ctx.fillRect(0, 0, size, size);
+  ctx.fillStyle = '#fff3b0';
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2;
+    ctx.fillRect(cx + Math.cos(a) * size * 0.07 - 1, cx + Math.sin(a) * size * 0.07 - 1, 2, 2);
   }
   return srgb(new THREE.CanvasTexture(c));
 }

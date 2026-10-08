@@ -126,6 +126,21 @@ button {
   color: var(--ink);
   cursor: pointer;
 }
+/* .controls sets display, which would otherwise override the hidden attribute */
+.controls[hidden] { display: none; }
+
+.almanac {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+.almanac span:first-child { color: var(--ink); }
+
 .hint {
   margin-top: 10px;
   font-size: 11px;

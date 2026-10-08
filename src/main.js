@@ -2,13 +2,20 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from './sky.js';
 import { buildPlanet, buildLampPost } from './planet.js';
+import { buildPond } from './pond.js';
+import { createSeasons } from './seasons.js';
+import { createWeather } from './weather.js';
+import {
+  createLocation, sunTimes, sunTheta, startOfDay, moonPhase, moonIllumination, moonPhaseName,
+  seasonPosition, seasonName,
+} from './astro.js';
 import { buildRoom } from './room.js';
 import { Fireflies } from './fireflies.js';
 import { createWind } from './wind.js';
 import { createMusicPanel } from './music.js';
 import { createBook } from './book.js';
 import { createGameOverlay } from './game.js';
-import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam } from './time.js';
+import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam, solarHours } from './time.js';
 
 // ---------------------------------------------------------------------------
 // Renderer
@@ -129,7 +136,13 @@ scene.add(camera); // needed so sprites parented to the camera render
 // ---------------------------------------------------------------------------
 const sky = new Sky(camera);
 const wind = createWind();
-scene.add(buildPlanet(wind));
+const planet = buildPlanet(wind);
+scene.add(planet.group);
+const pond = buildPond();
+scene.add(pond.group);
+const seasons = createSeasons(planet);
+const weather = createWeather(planet.trees);
+scene.add(weather.group);
 // a lamp post out on the meadow, a little to the right of the house
 const lampPost = buildLampPost(6.4, -0.8);
 scene.add(lampPost.group);
@@ -191,6 +204,49 @@ const liveBtn = document.getElementById('live-btn');
 const params = new URLSearchParams(location.search);
 let override = parseTimeParam(params.get('t'));
 let live = override === null;
+
+// where the viewer is, for real sunrise, sunset and hemisphere
+const place = createLocation(params, () => { sunCache.key = ''; });
+
+// the calendar day the scene shows: today, or one picked on the year slider / ?date=YYYY-MM-DD
+let dateOverride = null;
+{
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(params.get('date') || '');
+  if (m) dateOverride = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+const dateSlider = document.getElementById('date-slider');
+const todayBtn = document.getElementById('today-btn');
+const almanacEl = document.getElementById('almanac');
+const yearStart = () => new Date(new Date().getFullYear(), 0, 1);
+const dayIndex = (d) => Math.round((startOfDay(d) - yearStart()) / 86400000);
+function setDateOverride(d) {
+  dateOverride = d;
+  todayBtn.disabled = d === null;
+}
+setDateOverride(dateOverride);
+dateSlider.addEventListener('input', () => {
+  const d = yearStart();
+  d.setDate(d.getDate() + Number(dateSlider.value));
+  setDateOverride(d);
+});
+todayBtn.addEventListener('click', () => setDateOverride(null));
+
+const sunCache = { key: '', times: null };
+function sunFor(day) {
+  const key = `${day.getFullYear()}-${day.getMonth()}-${day.getDate()}|${place.lat}|${place.lon}`;
+  if (sunCache.key !== key) {
+    sunCache.key = key;
+    sunCache.times = sunTimes(day, place.lat, place.lon);
+  }
+  return sunCache.times;
+}
+
+/** The moment the scene shows: real now, or the scrubbed time on the chosen day. */
+function sceneMoment() {
+  if (live && !dateOverride) return new Date();
+  const day = startOfDay(dateOverride ?? new Date());
+  return new Date(day.getTime() + currentHours() * 3600e3);
+}
 
 function setLive(on) {
   live = on;
@@ -299,7 +355,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, room, music, book, gameWindow, THREE };
+  window.__cozy = { camera, controls, room, music, book, gameWindow, planet, seasons, THREE };
 }
 
 function updateHover() {
@@ -336,6 +392,10 @@ const camUp = new THREE.Vector3();
 const camBack = new THREE.Vector3(); // from the scene toward the viewer
 const KEY_BIAS = 0.45; // tilt the sun toward the viewer so the room interior stays readable
 const sunDir = new THREE.Vector3();
+const moonDir = new THREE.Vector3();
+const nightDir = new THREE.Vector3();
+const viewDir = new THREE.Vector3();
+const pondLight = { sunDir, moonDir, viewDir };
 const clock = new THREE.Clock();
 let hudTimer = 1; // force a HUD refresh on the first frame
 
@@ -355,7 +415,16 @@ function applyLighting(s) {
   sun.intensity = s.sunIntensity;
   sun.castShadow = s.sunIntensity > 0.02;
 
-  moon.position.copy(TARGET).addScaledVector(sunDir, -80);
+  moonDir
+    .copy(camRight)
+    .multiplyScalar(Math.cos(s.moonTheta))
+    .addScaledVector(camUp, Math.sin(s.moonTheta))
+    .addScaledVector(camBack, KEY_BIAS * Math.max(0, Math.sin(s.moonTheta) + 0.2))
+    .normalize();
+  // the night key comes from the moon while it is up, otherwise from the sky opposite the sun
+  nightDir.copy(sunDir).negate().lerp(moonDir, s.moonUp).normalize();
+  viewDir.copy(camBack);
+  moon.position.copy(TARGET).addScaledVector(nightDir, 80);
   moon.intensity = s.moonIntensity;
   moon.castShadow = s.moonIntensity > 0.02;
 
@@ -376,7 +445,15 @@ function frame() {
   if (book.isOpen || gameWindow.isOpen) return;
   const t = clock.elapsedTime;
   const hours = currentHours();
-  computeSky(hours, state);
+  const moment = sceneMoment();
+  const sunT = sunFor(moment);
+  const theta = sunTheta(hours, sunT);
+  // the moon trails the sun round the sky by its phase: full moons rise at sunset
+  state.moonPhase = moonPhase(moment.getTime());
+  state.moonLit = moonIllumination(state.moonPhase);
+  state.moonTheta = theta - state.moonPhase * Math.PI * 2;
+  computeSky(hours, state, theta);
+  const season = seasons.set(seasonPosition(moment, place.lat));
 
   keyboardPan(dt);
   controls.update();
@@ -389,7 +466,9 @@ function frame() {
   room.update(state, dt, t);
   lampPost.update(state, t);
   wind.update(t);
-  fireflies.update(t, state.night);
+  fireflies.update(t, state.night * (1 - season.winter));
+  pond.update(state, dt, t, pondLight, season);
+  weather.update(season, dt, t, THREE.MathUtils.smoothstep(state.elev, -0.1, 0.3), camera.zoom);
 
   renderer.clear();
   sky.render(renderer);
@@ -399,9 +478,27 @@ function frame() {
   if (hudTimer > 0.25) {
     hudTimer = 0;
     clockEl.textContent = formatClock(hours);
-    phaseEl.textContent = phaseName(hours);
+    phaseEl.textContent = phaseName(solarHours(theta));
     if (live) slider.value = String(Math.floor(hours * 60));
+    if (!dateOverride) dateSlider.value = String(dayIndex(moment));
+    updateAlmanac(moment, sunT, season);
   }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+let almanacText = '';
+function updateAlmanac(moment, sunT, season) {
+  const lines = [
+    `${MONTHS[moment.getMonth()]} ${moment.getDate()} · ${seasonName(season.position)}`,
+    `Sunrise ${formatClock((sunT.sunrise + 24) % 24)} · Sunset ${formatClock(sunT.sunset % 24)}`,
+    moonPhaseName(state.moonPhase),
+  ];
+  const text = lines.join('\n');
+  if (text === almanacText) return;
+  almanacText = text;
+  almanacEl.replaceChildren(...lines.map((l) => Object.assign(document.createElement('span'), { textContent: l })));
+  const where = place.source === 'device' ? 'your location' : place.label ? `${place.label} (from your time zone)` : 'your time zone';
+  almanacEl.title = `Sun times for ${where}`;
 }
 
 renderer.setAnimationLoop(frame);

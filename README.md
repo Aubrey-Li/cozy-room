@@ -2,7 +2,9 @@
 
 A cozy isometric room on a tiny planet, built with [three.js](https://threejs.org/) and WebGL.
 
-The sky follows your local 24-hour clock: the sun rises at six, climbs to noon, sets behind the planet in the evening, and the stars and moon come out at night. Outside the room is a little meadow where fireflies drift once it gets dark. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery and string lights that glow warm orange after sunset.
+The sky follows your local clock and your real sunrise and sunset: the sun climbs to solar noon, sets behind the planet in the evening, and the stars come out at night. The moon shows tonight's phase and keeps its own hours, so a full moon rises at sunset and a crescent hangs near the sun. The planet turns with the seasons: cherry blossom opening on bare branches in spring, leaves growing out to a lush summer green, red and gold leaves in the fall, and in winter bare, snow-laden trees and snow that falls gently until it buries the whole planet. Each season holds for a while and eases into the next over a few weeks. Outside the room is a little meadow where fireflies drift once it gets dark, and a stone-edged pond beside the garden path where koi swim; the water glitters by day, catches the moonlight at night and frosts over in deep winter.
+
+Sun times and hemisphere come from your time zone's reference city (no location prompt). If the page already has location permission, your exact position is used instead. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery and string lights that glow warm orange after sunset.
 
 ## Run it
 
@@ -24,8 +26,10 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 - Click or tap the window to swing it open; the sheer linen curtains billow into the room with the breeze. Click again to close it.
 - Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; the arrow (or the panel title) minimizes it to a slim now-playing bar with play/pause while the song keeps going, and closing the panel stops the music. Songs stream through YouTube's embedded player, shown in the expanded panel and hidden in the mini bar. YouTube's API policies ask for a visible player of at least 200x200 while playing, so hiding it carries some risk of YouTube restricting playback.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
+- Drag the second slider to scrub through the year and watch the seasons, sun times and moon change. Press **Today** to return to the real date.
+- The panel lists the date and season, today's sunrise and sunset, and the moon phase.
 - Drag to orbit around the planet, scroll or pinch to zoom, right-drag (or `W A S D` / arrow keys) to pan. Press `R` to reset the view.
-- Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`. Add `?z=2.5` to start zoomed in, and `?target=x,y,z` to centre the view on a point.
+- Add `?t=HH:MM` to the URL to open the scene at a specific time, e.g. `?t=21:30`. Add `?z=2.5` to start zoomed in, and `?target=x,y,z` to centre the view on a point. `?date=2026-01-15` opens on a given day, and `?loc=lat,lon` sets the location used for the sun and seasons.
 
 ## Layout
 
@@ -33,9 +37,15 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 index.html        page shell, import map, HUD
 style.css         HUD styling
 src/main.js       renderer, camera, lights, frame loop
-src/time.js       local clock, sun angle, sky palettes
+src/time.js       local clock, sky palettes and light from the sun angle
+src/astro.js      location, sunrise and sunset, moon phase, season position
+src/tzcoords.js   approximate coordinates for each time zone (generated from tz zone.tab)
 src/sky.js        screen-space sky gradient, stars, sun and moon
 src/planet.js     the little planet, grass, flowers, trees, rose
+src/planet-math.js  planet radius, placing things on the surface, the snow field
+src/pond.js       the pond: water shader, bank, lily pads and koi
+src/seasons.js    seasonal colours, blossom, fallen leaves and snow cover
+src/weather.js    falling snow, autumn leaves and cherry petals
 src/room.js       the room and everything in it
 src/fireflies.js  fireflies over the meadow at night
 src/music.js      song list panel and YouTube player
