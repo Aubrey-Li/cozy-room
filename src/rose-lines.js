@@ -1,6 +1,12 @@
 // Everything the rose says. Each list is picked from at random, so add,
-// remove or rewrite freely. She is vain and demanding, and she adores you;
-// she would just never say so plainly. Until the glass breaks.
+// remove or rewrite freely.
+//
+// She changes as she is cared for. Lists written as three lists are her
+// three stages, chosen by how tamed she is (see STAGES in rose.js):
+//   [0] demanding: vain, imperious, a little ungrateful
+//   [1] softening: she starts to notice you, and says please
+//   [2] appreciating: grateful and warm, and finding her own strength
+// Lists written as one list are the same at every stage.
 
 export const LINES = {
   // the very first time someone lifts her glass
@@ -10,67 +16,97 @@ export const LINES = {
   ],
   // the first visit on a new day
   returning: [
-    'You came back. I knew you would. I wasn\'t counting the days or anything.',
-    'There you are. I suppose you had more important roses to see.',
-    'Back again? Good. I was beginning to wilt from boredom.',
+    ['Oh. You again. I suppose you\'ve come to admire me.', 'Back? Well, don\'t dawdle. I have needs.'],
+    ['You came back. ...I wasn\'t counting the days.', 'There you are. I\'d started to wonder.'],
+    ['You came back! I was hoping you would.', 'There you are. The meadow\'s nicer when you\'re here.'],
   ],
 
   // what she asks for
   cover: [
-    'It\'s getting cold. My glass, please. Before I catch my death.',
-    'The night air is simply terrible for my petals. Cover me?',
-    'Brr. Where is my globe? You\'re supposed to think of these things.',
+    ['It\'s freezing. My glass. Now, before I wilt.', 'Do you want me to catch my death? The glass!', 'The night air is simply terrible for my petals. Cover me.'],
+    ['It\'s getting cold. Would you put my glass over me? Please.', 'Brr. My globe, if you don\'t mind. It\'s a long night.'],
+    ['It\'s a cold one. Would you mind the glass? Just for tonight.', 'Could I have my glass? I\'m still learning the cold.'],
   ],
   uncover: [
-    'It\'s so stuffy in here. Lift the glass. Gently!',
-    'I can hardly feel the sun through all this glass. Take it off?',
-    'Let me breathe a little. You can admire me better that way, too.',
+    ['It\'s stifling in here. Lift the glass. Gently! I\'m delicate.', 'I can\'t feel the sun through all this glass. Must I think of everything?'],
+    ['Could you lift the glass? It\'s so warm today.', 'Let me breathe a little? You can see me better that way, too.'],
+    ['Would you lift the glass? I want to feel the sun on my own.', 'Take the glass off? I\'d like to try standing in the open.'],
   ],
   window: [
-    'Is that the window open? I can feel the draft from all the way out here.',
-    'Close that window, would you? It\'s blowing my petals about.',
+    ['Is that window open? I can feel the draft from here. Close it.', 'Shut that window. My petals are not for blowing about.'],
+    ['Would you close that window? There\'s a draft.', 'Your window\'s open. ...Not a complaint. Just an observation. A cold one.'],
+    ['Your window\'s open. Mind you don\'t catch cold in there, either.', 'Close your window? I worry about you too, you know.'],
   ],
   music: [
-    'It\'s far too quiet. Put on a record for me.',
-    'Play something. Something worthy of me.',
+    ['It\'s far too quiet. Put on a record. Something worthy of me.', 'Music. Now. A rose deserves to be serenaded.'],
+    ['It\'s quiet. Would you play something?', 'Put a record on? I like it when you choose.'],
+    ['Will you play something? I\'d like to hear what you love.', 'Play me a song. Any song. I just like the company.'],
   ],
 
   // when she gets what she asked for
   thanks: [
-    'Mm. Better. Not that I needed it.',
-    'There. You do try, don\'t you.',
-    '...Thank you. Don\'t let it go to your head.',
-    'That\'s how I like it. You\'re learning.',
+    ['Took you long enough.', 'Hm. Adequate.', 'Well. That\'s the least you could do.', 'Better. Don\'t expect me to say thank you.'],
+    ['...Thank you.', 'Thank you. I don\'t say that often, you know.', 'Mm. You\'re better at this than I thought.'],
+    ['Thank you. Truly.', 'You always come. I don\'t take that for granted anymore.', 'Thank you. I\'ll try to be as kind to you.'],
   ],
   musicThanks: [
-    'Oh, I like this one. Did you pick it for me?',
-    'Mm. Now that\'s music a rose can sway to.',
+    ['Hm. It\'ll do. Is that the best you have?', 'Mm. Not bad. For a song that isn\'t about me.'],
+    ['Oh, I like this one. Did you pick it for me?', 'Mm. Now that\'s music a rose can sway to.'],
+    ['This is lovely. Thank you for sharing it with me.', 'I could listen to this all day. With you, I mean.'],
   ],
   // care she didn't have to ask for
   noticed: [
-    'Oh. You noticed. ...You\'re sweet, sometimes.',
-    'Before I even asked? Hm. Maybe you\'re worth keeping.',
+    ['Oh. Well. I was about to ask anyway.', 'Hm. At least one of us is paying attention to me.'],
+    ['Oh. You noticed. ...You\'re sweet, sometimes.', 'Before I even asked? Hm. Maybe you\'re worth keeping.'],
+    ['You knew before I asked. Thank you.', 'You know me so well. Thank you, really.'],
   ],
   // when nobody answers her
   sulk: [
-    'Never mind. I\'ll manage. I always do.',
-    'Forget it. I wasn\'t really cold anyway.',
-    'Fine. I have my thorns. I don\'t need anybody.',
+    ['Fine! Ignore me. See if I care.', 'Never mind. Nobody listens to a rose.', 'Forget it. I have my thorns. I don\'t need anybody.'],
+    ['Never mind. I\'m sure you were busy.', 'It\'s alright. I managed.'],
+    ['That\'s alright. I can manage on my own. I\'m finding I can.', 'Never mind. I think I was stronger than I thought.'],
   ],
 
   // lifting or lowering the glass when she didn't ask
-  liftCold: ['Must you? It\'s freezing out here!', 'Ah! The cold! You\'re so careless with me.'],
-  liftWarm: ['Finally, some air.', 'Well? Go on, look. I know I\'m lovely.'],
-  lowerCold: ['Mm. Cosy.', 'Good. Keep the night out.'],
-  lowerWarm: ['Hiding me away again?', 'Under glass in this weather? How dull.'],
-
-  // now and then, when she has nothing to demand
-  tender: [
-    'You know you\'re the only one who visits me.',
-    'I have four thorns, you know. I\'m very fierce.',
-    'Stay a little longer. The meadow\'s nicer when you\'re here.',
-    'There are other roses, I\'m sure. But they aren\'t yours, are they?',
+  liftCold: [
+    ['Must you? It\'s freezing out here!', 'Ah! The cold! You\'re so careless with me.'],
+    ['Oh! That\'s cold. ...Just for a moment, then.'],
+    ['Oh, the night air. ...No, it\'s alright. I want to feel it.'],
   ],
+  liftWarm: [
+    ['Finally, some air. Well? Go on, look at me.', 'There. Now you may admire me.'],
+    ['Hello again.', 'The sun\'s lovely today, isn\'t it?'],
+    ['The sun! Thank you.', 'Hello, you. Isn\'t it a beautiful day?'],
+  ],
+  lowerCold: [
+    ['Mm. Acceptable.', 'Good. Keep the night off me.'],
+    ['Thank you. It\'s cosy in here.'],
+    ['Thank you. ...Though I think I could have managed.'],
+  ],
+  lowerWarm: [
+    ['Hiding me away? In this weather? How dull.', 'What, am I too lovely to look at?'],
+    ['Oh. Alright. Under the glass I go.'],
+    ['Under glass on a day like this? Well, if you insist.'],
+  ],
+
+  // now and then, when she has nothing to ask for
+  musing: [
+    ['Have you ever seen a rose as beautiful as me? No. You haven\'t.', 'The sun and I came up together this morning. It was a close contest.', 'I have four thorns, you know. I\'m very fierce. Be careful with me.'],
+    ['You know you\'re the only one who visits me.', 'Do you ever get tired of looking after me?', 'I was unkind to you at first. I\'m... working on it.'],
+    ['I used to think I needed the glass to be safe.', 'Every time you come, I feel a little taller.', 'There are other roses, I\'m sure. But they aren\'t yours, are they?', 'My thorns aren\'t for keeping you away anymore. They\'re just mine.'],
+  ],
+  // only once she is finding her strength: on a cold night, she would rather try it alone
+  brave: [
+    'It\'s cold tonight. ...No, don\'t cover me. I want to see if I can bear it.',
+    'Leave the glass off. I\'d like to try the night on my own.',
+  ],
+
+  // turning points, each said once, as her bond reaches that number
+  turning: {
+    3: '...You keep coming back. Even when I\'m prickly with you. Why?',
+    5: 'I\'ve been thinking. I always said the glass kept me safe. Maybe it just kept me small.',
+    6: 'Someday I\'d like to stand on my own. Would you still visit me, if I did?',
+  },
 
   // if her glass is off when her moment comes, she asks for it one last time
   lastFavour: [

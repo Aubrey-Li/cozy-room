@@ -104,8 +104,8 @@ window.addEventListener('blur', () => keysDown.clear());
 
 // a slow glide that brings something to the centre of the view, given up the moment you take over
 let glide = null;
-function glideTo(point, zoom = 2.6) {
-  glide = { from: controls.target.clone(), to: point.clone(), z0: camera.zoom, z1: Math.max(camera.zoom, zoom), t: 0, dur: 2.2 };
+function glideTo(point, zoom = Math.max(camera.zoom, 2.6)) {
+  glide = { from: controls.target.clone(), to: point.clone(), z0: camera.zoom, z1: zoom, t: 0, dur: 2.2 };
 }
 const glideStep = new THREE.Vector3();
 function stepGlide(dt) {
@@ -356,11 +356,18 @@ const pointerNdc = new THREE.Vector2();
 const book = createBook({ onSound: (name) => ambience.book[name]() });
 // the rose under her glass, out on the meadow
 let roseMoment = false;
+let roseZoomBefore = 1;
 const rose = createRose(planet.rose, {
   sound: ambience.rose,
   onClimax: (at, on) => {
     roseMoment = on;
-    if (at) glideTo(at);
+    if (on) {
+      roseZoomBefore = camera.zoom;
+      glideTo(at);
+    } else {
+      // her moment is over: the view settles back on the house, as zoomed as it was before
+      glideTo(TARGET, roseZoomBefore);
+    }
   },
 });
 const gameWindow = createGameOverlay();

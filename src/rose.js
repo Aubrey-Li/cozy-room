@@ -14,7 +14,15 @@ import { LINES } from './rose-lines.js';
 const KEY = 'cozy-room:rose';
 const BOND_TO_BLOOM = 7;   // acts of care before she breaks free
 const CARE_GAP = 30;       // seconds between acts of care that count
-const DEMAND_LIFE = 45;    // how long she waits before sulking
+
+// She grows through three stages as she is tamed: demanding, softening,
+// appreciating. Each stage starts at a bond count, and changes how often she
+// asks, how long she waits for you, and how much she muses instead.
+const STAGES = [
+  { from: 0, patience: 30, afterMet: [30, 55], afterSulk: [35, 60], afterMusing: [35, 60], musing: 0.5 },
+  { from: 3, patience: 45, afterMet: [35, 65], afterSulk: [45, 75], afterMusing: [40, 70], musing: 0.8 },
+  { from: 5, patience: 60, afterMet: [45, 75], afterSulk: [55, 85], afterMusing: [40, 65], musing: 1.6 },
+];
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -29,6 +37,12 @@ function load() {
 function save(mem) {
   try { localStorage.setItem(KEY, JSON.stringify(mem)); } catch { /* storage unavailable */ }
 }
+/** A stage's lines from a list that may be split by stage (see rose-lines.js). */
+const linesFor = (key, stage) => {
+  const v = LINES[key];
+  return Array.isArray(v[0]) ? v[Math.min(stage, v.length - 1)] : v;
+};
+
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -346,6 +360,11 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
   let glam = mem.free ? 1 : 0;
   let pendingBloom = mem.bond >= BOND_TO_BLOOM && !mem.free ? 3 : -1;
   let nextFavour = 0; // when she next asks for her glass back, if it is off when her moment comes
+  let turning = 0;    // a turning point reached, waiting for the moment to say it
+  let braveUntil = 0; // she asked to face the cold alone, for a while
+  const stageIndex = () => STAGES.reduce((i, st, k) => (mem.bond >= st.from ? k : i), 0);
+  const stage = () => STAGES[stageIndex()];
+  const L = (key) => linesFor(key, stageIndex());
   if (mem.free) {
     dome.visible = false;
     fallen.visible = false;
@@ -358,6 +377,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
     lastCare = clock;
     mem.bond += 1;
     save(mem);
+    if (LINES.turning[mem.bond]) turning = mem.bond;
     if (mem.bond >= BOND_TO_BLOOM && pendingBloom < 0) pendingBloom = clock + 4.5;
     return true;
   }
@@ -365,15 +385,17 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
   function meet() {
     const kind = demand.kind;
     demand = null;
-    nextDemand = clock + rand(35, 65);
+    // she thanks you as she is now; the care may carry her into her next stage
+    const line = L(kind === 'music' ? 'musicThanks' : 'thanks');
+    nextDemand = clock + rand(...stage().afterMet);
     care(kind);
-    say(kind === 'music' ? LINES.musicThanks : LINES.thanks);
+    say(line);
   }
 
   function click() {
     if (climax) return; // she is busy becoming herself
     if (mem.free) {
-      say(LINES.free);
+      say(L('free'));
       return;
     }
     domeOn = !domeOn;
@@ -384,7 +406,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
         bubbleUntil = Math.min(bubbleUntil, clock); // no waiting on her last request
         bubble.classList.remove('show');
       } else {
-        say(LINES.lastFavour);
+        say(L('lastFavour'));
         nextFavour = clock + 45;
       }
       return;
@@ -396,9 +418,10 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
       const day = today();
       if (!first && mem.lastDay && mem.lastDay !== day) {
         mem.lastDay = day;
+        const line = L('returning');
         care('return');
         lastCare = -Infinity; // coming back doesn't use up today's first act of care
-        say(LINES.returning);
+        say(line);
         save(mem);
         return;
       }
@@ -406,7 +429,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
     }
     save(mem);
     if (first) {
-      say(LINES.first);
+      say(L('first'));
       nextDemand = clock + 14;
       return;
     }
@@ -417,9 +440,16 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
     }
     const wants = scene.cold ? 'on' : 'off';
     const got = domeOn ? 'on' : 'off';
-    if (wants === got && !demand && care('noticed')) say(LINES.noticed);
-    else if (domeOn) say(scene.cold ? LINES.lowerCold : LINES.lowerWarm);
-    else say(scene.cold ? LINES.liftCold : LINES.liftWarm);
+    // (covering her just after she asked to face the cold alone isn't the care she wanted)
+    const line = L(domeOn ? (scene.cold ? 'lowerCold' : 'lowerWarm') : (scene.cold ? 'liftCold' : 'liftWarm'));
+    if (wants === got && !demand && !(domeOn && clock < braveUntil)) {
+      const noticed = L('noticed');
+      if (care('noticed')) {
+        say(noticed);
+        return;
+      }
+    }
+    say(line);
   }
 
   function maybeDemand() {
@@ -430,27 +460,42 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
       if (met) meet();
       else if (clock > demand.until) {
         demand = null;
-        nextDemand = clock + rand(45, 75);
-        if (onScreen && !hidden) say(LINES.sulk);
+        nextDemand = clock + rand(...stage().afterSulk);
+        if (onScreen && !hidden) say(L('sulk'));
       }
       return;
     }
-    if (clock < nextDemand || !onScreen || hidden || clock < bubbleUntil) return;
+    if (!onScreen || hidden || clock < bubbleUntil) return;
+    // a turning point comes before anything else, once the last line has had a moment
+    if (turning) {
+      if (clock < bubbleUntil + 1.5) return;
+      say(LINES.turning[turning], 1.5);
+      turning = 0;
+      nextDemand = Math.max(nextDemand, clock + 25);
+      return;
+    }
+    if (clock < nextDemand) return;
+    const st = stage();
     const options = [];
-    if (scene.cold && !domeOn) options.push(['cover', 3]);
+    if (scene.cold && !domeOn && clock > braveUntil) {
+      // once she is finding her strength, she sometimes wants to face the cold alone
+      if (st === STAGES[2]) options.push(['cover', 1.5], ['brave', 1.5]);
+      else options.push(['cover', 3]);
+    }
     if (!scene.cold && domeOn) options.push(['uncover', 3]);
     if (scene.windowOpen) options.push(['window', 1.5]);
     if (!scene.musicPlaying) options.push(['music', 0.8]);
-    options.push(['tender', 0.7]);
-    let r = Math.random() * options.reduce((s, [, w]) => s + w, 0);
+    options.push(['musing', st.musing]);
+    let r = Math.random() * options.reduce((sum, [, w]) => sum + w, 0);
     const [kind] = options.find(([, w]) => (r -= w) < 0) ?? options[0];
-    if (kind === 'tender') {
-      say(LINES.tender);
-      nextDemand = clock + rand(40, 70);
+    if (kind === 'musing' || kind === 'brave') {
+      say(L(kind), kind === 'brave' ? 1 : 0);
+      if (kind === 'brave') braveUntil = clock + 120;
+      nextDemand = clock + rand(...st.afterMusing);
       return;
     }
-    demand = { kind, until: clock + DEMAND_LIFE };
-    say(LINES[kind], 2);
+    demand = { kind, until: clock + st.patience };
+    say(L(kind), 2);
   }
 
   // ---------------------------------------------------------------- the climax
@@ -461,7 +506,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
     planCracks();
     crackDrawn = 0;
     nextTink = 0;
-    say(LINES.breaking, 1.5);
+    say(L('breaking'), 1.5);
     bloom.getWorldPosition(bloomTop);
     onClimax?.(bloomTop.clone(), true);
   }
@@ -505,7 +550,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
       stepShards(dt, a);
       if (!c.spoke && a > 2.8) {
         c.spoke = true;
-        say(LINES.freed, 1);
+        say(L('freed'), 1);
       }
       if (a > 9 && !shardMesh.count && !burstMesh.count) {
         climax = null;
@@ -595,7 +640,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
       // the glass has to be on her, and settled on its stand, before she can break it
       if (domeOn && domeT === 0 && clock > bubbleUntil) beginClimax();
       else if (!domeOn && clock > nextFavour && clock > bubbleUntil) {
-        say(LINES.lastFavour);
+        say(L('lastFavour'));
         nextFavour = clock + 45;
       }
     }
