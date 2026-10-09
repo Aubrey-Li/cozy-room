@@ -359,6 +359,7 @@ function buildBloom() {
       const az = (i / L.n) * Math.PI * 2 + li * 0.62;
       const at = new THREE.Vector3(Math.sin(az) * L.r, L.y, Math.cos(az) * L.r);
       const petal = placeLeaf(geo, L.mat, at, az, L.pitch, L.len, (i % 2 ? 1 : -1) * 0.08);
+      petal.userData.petal = { layer: li, pitch: L.pitch };
       g.add(petal);
     }
   });
@@ -379,6 +380,7 @@ function buildBloom() {
     g.add(placeLeaf(sepalGeo, green, new THREE.Vector3(Math.sin(az) * 0.02, -0.005, Math.cos(az) * 0.02), az, -0.35, 0.11));
   }
   g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  g.userData.materials = { deep, mid, outer };
   return g;
 }
 
@@ -400,9 +402,15 @@ function buildRoseLeaf(material) {
   return g;
 }
 
-/** A single rose under a glass cloche, as a nod to the Little Prince. */
+/**
+ * A single rose under a glass cloche, as a nod to the Little Prince. The plant
+ * (stem, thorns, leaves and bloom) sits in its own group rooted at the soil so
+ * rose.js can grow it.
+ */
 function buildRose(dx, dz) {
   const g = new THREE.Group();
+  const plant = new THREE.Group();
+  plant.position.y = 0.13;
   const base = new THREE.Mesh(
     new THREE.CylinderGeometry(0.5, 0.55, 0.12, 24),
     new THREE.MeshStandardMaterial({ color: 0xd9c7a8, roughness: 0.9 }),
@@ -420,14 +428,14 @@ function buildRose(dx, dz) {
   // stem: a gentle S-curve
   const stemMat = new THREE.MeshStandardMaterial({ color: 0x3f7a2f, roughness: 0.85 });
   const stemCurve = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0, 0.13, 0),
-    new THREE.Vector3(0.03, 0.4, 0.01),
-    new THREE.Vector3(-0.02, 0.72, -0.01),
-    new THREE.Vector3(0.0, 0.98, 0.0),
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0.03, 0.27, 0.01),
+    new THREE.Vector3(-0.02, 0.59, -0.01),
+    new THREE.Vector3(0.0, 0.85, 0.0),
   ]);
   const stemMesh = new THREE.Mesh(new THREE.TubeGeometry(stemCurve, 30, 0.014, 7), stemMat);
   stemMesh.castShadow = true;
-  g.add(stemMesh);
+  plant.add(stemMesh);
 
   // thorns
   const thornMat = new THREE.MeshStandardMaterial({ color: 0x6a5a3a, roughness: 0.8 });
@@ -439,7 +447,7 @@ function buildRose(dx, dz) {
     const th = new THREE.Mesh(thornGeo, thornMat);
     th.position.copy(p).addScaledVector(outDir, 0.018);
     th.quaternion.setFromUnitVectors(up, outDir);
-    g.add(th);
+    plant.add(th);
   }
 
   // two compound leaves off the stem
@@ -450,14 +458,15 @@ function buildRose(dx, dz) {
     leaf.rotation.order = 'YXZ';
     leaf.rotation.y = az;
     leaf.rotation.x = -0.45; // angle up from the stem
-    g.add(leaf);
+    plant.add(leaf);
   }
 
   const bloom = buildBloom();
   bloom.scale.setScalar(1.45);
   bloom.position.copy(stemCurve.getPoint(1));
   bloom.rotation.z = 0.08;
-  g.add(bloom);
+  plant.add(bloom);
+  g.add(plant);
 
   // one fallen petal on the base
   const fallen = placeLeaf(
@@ -486,7 +495,7 @@ function buildRose(dx, dz) {
   const { position, quaternion } = onPlanet(dx, dz, 0);
   g.position.copy(position);
   g.quaternion.copy(quaternion);
-  return g;
+  return { group: g, plant, bloom, dome, fallen, leafMat, stemMat };
 }
 
 /**
@@ -504,9 +513,10 @@ export function buildPlanet(wind) {
     buildTree(-3.0, 11.5, 0.7, wind),
   ];
   const stones = buildStones();
-  group.add(ground, grass.mesh, flowers.group, stones, buildRose(ROSE.dx, ROSE.dz));
+  const rose = buildRose(ROSE.dx, ROSE.dz);
+  group.add(ground, grass.mesh, flowers.group, stones, rose.group);
   for (const t of trees) group.add(t.group);
-  return { group, ground, grass, flowers, trees, stones };
+  return { group, ground, grass, flowers, trees, stones, rose };
 }
 
 /**

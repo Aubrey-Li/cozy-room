@@ -15,6 +15,8 @@ import { createWind } from './wind.js';
 import { createMusicPanel } from './music.js';
 import { createBook } from './book.js';
 import { createGameOverlay } from './game.js';
+import { createAmbience } from './ambience.js';
+import { createRose } from './rose.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam, solarHours } from './time.js';
 
 // ---------------------------------------------------------------------------
@@ -99,6 +101,26 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => keysDown.delete(e.code));
 window.addEventListener('blur', () => keysDown.clear());
+
+// a slow glide that brings something to the centre of the view, given up the moment you take over
+let glide = null;
+function glideTo(point, zoom = 2.6) {
+  glide = { from: controls.target.clone(), to: point.clone(), z0: camera.zoom, z1: Math.max(camera.zoom, zoom), t: 0, dur: 2.2 };
+}
+const glideStep = new THREE.Vector3();
+function stepGlide(dt) {
+  if (!glide) return;
+  glide.t = Math.min(1, glide.t + dt / glide.dur);
+  const k = glide.t * glide.t * (3 - 2 * glide.t);
+  glideStep.lerpVectors(glide.from, glide.to, k).sub(controls.target);
+  controls.target.add(glideStep);
+  camera.position.add(glideStep);
+  camera.zoom = THREE.MathUtils.lerp(glide.z0, glide.z1, k);
+  camera.updateProjectionMatrix();
+  if (glide.t >= 1) glide = null;
+}
+canvas.addEventListener('pointerdown', () => { glide = null; });
+canvas.addEventListener('wheel', () => { glide = null; }, { passive: true });
 
 function resetView() {
   camera.position.copy(HOME_POSITION);
@@ -302,28 +324,63 @@ function currentHours() {
 // ---------------------------------------------------------------------------
 // Record player: click or tap it to open the song list
 // ---------------------------------------------------------------------------
-const music = createMusicPanel({ onPlayingChange: (on) => room.setPlaying(on) });
+// ---------------------------------------------------------------------------
+// Sound: the seasons outside, the window, the book's pages
+// ---------------------------------------------------------------------------
+const ambience = createAmbience();
+const soundBtn = document.getElementById('sound-toggle');
+function reflectSound() {
+  const on = ambience.enabled;
+  soundBtn.classList.toggle('off', !on);
+  soundBtn.setAttribute('aria-pressed', String(on));
+  soundBtn.setAttribute('aria-label', on ? 'Turn sound off' : 'Turn sound on');
+  soundBtn.title = on ? 'Sound on' : 'Sound off';
+}
+reflectSound();
+soundBtn.addEventListener('click', () => {
+  ambience.setEnabled(!ambience.enabled);
+  reflectSound();
+});
+let musicPlaying = false;
+
+const music = createMusicPanel({
+  onPlayingChange: (on) => {
+    room.setPlaying(on);
+    musicPlaying = on;
+  },
+});
 const raycaster = new THREE.Raycaster();
 const pointerNdc = new THREE.Vector2();
 
 // things in the room you can click, checked against whatever the ray hits first
-const book = createBook();
+const book = createBook({ onSound: (name) => ambience.book[name]() });
+// the rose under her glass, out on the meadow
+let roseMoment = false;
+const rose = createRose(planet.rose, {
+  sound: ambience.rose,
+  onClimax: (at, on) => {
+    roseMoment = on;
+    if (at) glideTo(at);
+  },
+});
 const gameWindow = createGameOverlay();
 const clickables = [
   { roots: [room.recordPlayer], action: () => music.open() },
   { roots: [room.bookshelf], action: (at) => book.open(at) },
   { roots: [room.desk, room.chair], action: (at) => gameWindow.open(at) },
-  { roots: room.windowTargets, action: () => room.toggleWindow() },
+  { roots: room.windowTargets, action: () => ambience.window(room.toggleWindow()) },
   { roots: [room.lamp], action: () => room.cycleLamp() },
   { roots: [room.lightSwitch], action: () => room.cycleStringLights() },
+  { roots: rose.roots, action: () => rose.click() },
 ];
+const pickRoots = [room.group, ...rose.roots];
 
 function pick(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
   pointerNdc.set(((clientX - rect.left) / rect.width) * 2 - 1, -((clientY - rect.top) / rect.height) * 2 + 1);
   raycaster.setFromCamera(pointerNdc, camera);
   // only the room can sit between the camera and these objects, so skip the meadow
-  const hit = raycaster.intersectObject(room.group, true).find((h) => h.object.visible && !h.object.isLight && !h.object.isSprite);
+  const hit = raycaster.intersectObjects(pickRoots, true).find((h) => h.object.visible && !h.object.isLight && !h.object.isSprite);
   if (!hit) return null;
   for (let o = hit.object; o; o = o.parent) {
     const c = clickables.find((entry) => entry.roots.includes(o));
@@ -355,7 +412,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, controls, room, music, book, gameWindow, planet, seasons, THREE };
+  window.__cozy = { camera, controls, room, music, book, gameWindow, planet, seasons, ambience, rose, THREE };
 }
 
 function updateHover() {
@@ -441,6 +498,8 @@ function applyLighting(s) {
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
+  ambience.setFocus({ music: musicPlaying, book: book.isOpen, game: gameWindow.isOpen, rose: roseMoment });
+  rose.setHidden(book.isOpen || gameWindow.isOpen);
   // the scene sits frozen and blurred behind the book, so skip rendering it while reading
   if (book.isOpen || gameWindow.isOpen) return;
   const t = clock.elapsedTime;
@@ -454,8 +513,10 @@ function frame() {
   state.moonTheta = theta - state.moonPhase * Math.PI * 2;
   computeSky(hours, state, theta);
   const season = seasons.set(seasonPosition(moment, place.lat));
+  ambience.setScene(season, state.night, theta);
 
   keyboardPan(dt);
+  stepGlide(dt);
   controls.update();
   updateHover();
   camera.updateMatrixWorld();
@@ -465,6 +526,7 @@ function frame() {
   room.setViewZoom(camera.zoom);
   room.update(state, dt, t);
   lampPost.update(state, t);
+  rose.update(dt, t, { night: state.night, season, windowOpen: room.windowOpen, musicPlaying, camera });
   wind.update(t);
   fireflies.update(t, state.night * (1 - season.winter));
   pond.update(state, dt, t, pondLight, season);

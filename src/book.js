@@ -28,7 +28,7 @@ const el = (tag, cls, parent) => {
   return n;
 };
 
-export function createBook() {
+export function createBook({ onSound } = {}) {
   const pages = BOOK.pages;
   const last = pages.length - 1;
 
@@ -202,6 +202,7 @@ export function createBook() {
       { transform: `translate(0px, 0px) translateX(${cx}px) scale(1) rotate(0deg)`, opacity: 1 },
     ], { duration: 700, easing: 'cubic-bezier(.2,.75,.25,1)' });
 
+    onSound?.('open');
     const coverAnim = play(cover, spread
       ? [{ transform: 'rotateY(0deg)' }, { transform: 'rotateY(-180deg)' }]
       : [{ transform: 'rotateY(0deg)', opacity: 1 }, { transform: 'rotateY(-120deg)', opacity: 1, offset: 0.6 }, { transform: 'rotateY(-180deg)', opacity: 0 }],
@@ -247,6 +248,7 @@ export function createBook() {
     cover.style.transform = 'rotateY(-180deg)';
     cover.style.opacity = spread ? '1' : '0';
     if (spread) leftSlot.style.visibility = 'hidden';
+    onSound?.('close');
     const coverAnim = play(cover, spread
       ? [{ transform: 'rotateY(-180deg)' }, { transform: 'rotateY(0deg)' }]
       : [{ transform: 'rotateY(-180deg)', opacity: 0 }, { transform: 'rotateY(-120deg)', opacity: 1, offset: 0.4 }, { transform: 'rotateY(0deg)', opacity: 1 }],
@@ -293,6 +295,7 @@ export function createBook() {
     const next = pos + dir;
     if (next < 0 || next > maxPos()) return;
     busy = true;
+    onSound?.('flip');
     const flip = { duration: 820, easing: 'cubic-bezier(.45,.1,.3,1)' };
     const shadeKeys = [{ opacity: 0 }, { opacity: 0.55, offset: 0.5 }, { opacity: 0 }];
 

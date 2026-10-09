@@ -25,6 +25,7 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 - Click the bedside lamp to step it through bright, medium, dim and off. The little switch beside the window cycles the string lights: steady, alternating, blinking and off.
 - Click or tap the window to swing it open; the sheer linen curtains billow into the room with the breeze. Click again to close it.
 - Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; the arrow (or the panel title) minimizes it to a slim now-playing bar with play/pause while the song keeps going, and closing the panel stops the music. Songs stream through YouTube's embedded player, shown in the expanded panel and hidden in the mini bar. YouTube's API policies ask for a visible player of at least 200x200 while playing, so hiding it carries some risk of YouTube restricting playback.
+- The world has sound once you first click or tap: birdsong in spring (loudest at dawn), cicadas by day and crickets by night in summer, crisp gusts and skittering leaves in fall, and a soft hush in winter. It is muffled through the glass until you open the window. The window's latch and hinges and the book's cover and pages make their own small sounds, and the outdoors ducks under the record player and goes quiet while the game plays. All of it is synthesized live, with no audio files. The speaker button beside the clock turns it off, and the choice is remembered.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
 - Drag the second slider to scrub through the year and watch the seasons, sun times and moon change. Press **Today** to return to the real date.
 - The panel lists the date and season, today's sunrise and sunset, and the moon phase.
@@ -49,6 +50,9 @@ src/weather.js    falling snow, autumn leaves and cherry petals
 src/room.js       the room and everything in it
 src/fireflies.js  fireflies over the meadow at night
 src/music.js      song list panel and YouTube player
+src/ambience.js   seasonal soundscape, window and page sounds (synthesized)
+src/rose.js       the rose under her glass, and what becomes of her
+src/rose-lines.js everything the rose says
 src/game.js       the game window over the room (controls, mute)
 src/games/lamplighter.js  The Little Lamplighter: story, drawing, both endings
 src/games/sound.js        synthesized music and sound effects

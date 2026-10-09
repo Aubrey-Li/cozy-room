@@ -79,6 +79,11 @@ html, body {
   border-radius: 50%;
 }
 #hud-toggle svg { transition: transform 0.25s ease; }
+.hud-actions { display: flex; gap: 4px; flex: none; }
+#sound-toggle .i-off,
+#sound-toggle.off .i-on { display: none; }
+#sound-toggle.off .i-off { display: block; }
+#sound-toggle.off { opacity: 0.6; }
 
 .card.collapsed #hud-body { display: none; }
 .card.collapsed { min-width: 0; padding-bottom: 12px; }
@@ -369,4 +374,43 @@ button[disabled] { opacity: 0.45; cursor: default; }
   /* the mini player tucks into the corner instead of spanning the screen */
   .music.mini { left: auto; width: auto; max-height: none; padding: 8px 8px 8px 10px; }
   .music.mini .music-head { width: min(260px, calc(100vw - 48px)); }
+}
+
+/* the rose's speech bubble, floating just above her bloom */
+.rose-bubble {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 5;
+  max-width: min(240px, calc(100vw - 32px));
+  width: max-content;
+  padding: 9px 13px 10px;
+  margin-top: -14px;
+  border-radius: 14px;
+  background: rgba(40, 16, 26, 0.82);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(255, 170, 190, 0.22);
+  color: #ffeef2;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.3;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.rose-bubble.show { opacity: 1; }
+.rose-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 14px;
+  height: 7px;
+  transform: translateX(-50%);
+  background: rgba(40, 16, 26, 0.82);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .rose-bubble { transition: none; }
 }

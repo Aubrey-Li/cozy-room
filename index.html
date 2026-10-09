@@ -30,9 +30,15 @@
           <span id="clock">--:--</span>
           <span id="phase">&nbsp;</span>
         </button>
-        <button id="hud-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="hud-body" aria-label="Hide controls">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
+        <div class="hud-actions">
+          <button id="sound-toggle" class="icon-btn" type="button" aria-pressed="true" aria-label="Turn sound off" title="Sound on">
+            <svg class="i-on" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10H4z" fill="currentColor"/><path d="M16 9a4 4 0 010 6M18.5 6.5a7.5 7.5 0 010 11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            <svg class="i-off" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 10v4h4l5 4V6L8 10H4z" fill="currentColor"/><path d="M16.5 9.5l5 5M21.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <button id="hud-toggle" class="icon-btn" type="button" aria-expanded="true" aria-controls="hud-body" aria-label="Hide controls">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 15l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
       </div>
       <div id="hud-body">
         <div class="hud-inner">
