@@ -4,7 +4,7 @@ A cozy isometric room on a tiny planet, built with [three.js](https://threejs.or
 
 The sky follows your local clock and your real sunrise and sunset: the sun climbs to solar noon, sets behind the planet in the evening, and the stars come out at night. The moon shows tonight's phase and keeps its own hours, so a full moon rises at sunset and a crescent hangs near the sun. The planet turns with the seasons: cherry blossom opening on bare branches in spring, leaves growing out to a lush summer green, red and gold leaves in the fall, and in winter bare, snow-laden trees and snow that falls gently until it buries the whole planet. Each season holds for a while and eases into the next over a few weeks. Outside the room is a little meadow where fireflies drift once it gets dark, and a stone-edged pond beside the garden path where koi swim; the water glitters by day, catches the moonlight at night and frosts over in deep winter.
 
-Sun times and hemisphere come from your time zone's reference city (no location prompt). If the page already has location permission, your exact position is used instead. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery and string lights that glow warm orange after sunset.
+Sun times and hemisphere come from your time zone's reference city (no location prompt). If the page already has location permission, your exact position is used instead. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery, a framed print of the Himalayas above the bed and string lights that glow warm orange after sunset.
 
 ## Run it
 
@@ -63,4 +63,9 @@ book.css          paper, cover and page-turn styling
 src/foliage.js    shaped leaf and petal geometry, pots, stems
 src/wind.js       vertex-shader wind sway for leaves and grass (also in the shadow pass)
 src/textures.js   procedural canvas textures
+assets/           the photo print above the bed
 ```
+
+## Credits
+
+The framed print above the bed is a photo of the Himalayas from the [Himalayas Print, Nepal Photography](https://www.etsy.com/listing/1830885405/himalayas-print-nepal-photography) listing on Etsy, where the print in the real room was bought.

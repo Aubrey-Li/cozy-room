@@ -1079,6 +1079,36 @@ function buildGallery() {
   return g;
 }
 
+/** A framed print of a photograph, hung on wall A above the bed's headboard.
+ * Photo: "Himalayas Print, Nepal Photography", https://www.etsy.com/listing/1830885405/himalayas-print-nepal-photography */
+function buildBedPrint() {
+  const g = new THREE.Group();
+  const cx = -2.6, cy = 2.55; // centred on the bed; the headboard tops out at y = 1.65
+  const z = -W_INNER; // wall A's inner face
+  const pw = 1.58, ph = pw * (698 / 1024); // the photo keeps the image's proportions
+  const bar = 0.06, depth = 0.05;
+  const ow = pw + bar * 2, oh = ph + bar * 2;
+  const frameMat = mat(0xd9bb90, { roughness: 0.75 });
+  g.add(box(ow, bar, depth, frameMat, cx, cy + oh / 2 - bar / 2, z + depth / 2, { cast: false }));
+  g.add(box(ow, bar, depth, frameMat, cx, cy - oh / 2 + bar / 2, z + depth / 2, { cast: false }));
+  g.add(box(bar, ph, depth, frameMat, cx - ow / 2 + bar / 2, cy, z + depth / 2, { cast: false }));
+  g.add(box(bar, ph, depth, frameMat, cx + ow / 2 - bar / 2, cy, z + depth / 2, { cast: false }));
+  // the print sits a little recessed behind the frame's front edge; paper white until the photo arrives
+  const photoMat = new THREE.MeshStandardMaterial({ color: 0xfaf6ee, roughness: 0.9 });
+  new THREE.TextureLoader().load(new URL('../assets/himalayas-print.jpg', import.meta.url).href, (tex) => {
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    photoMat.map = tex;
+    photoMat.color.set(0xffffff);
+    photoMat.needsUpdate = true;
+  });
+  const photo = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), photoMat);
+  photo.position.set(cx, cy, z + 0.02);
+  photo.receiveShadow = true;
+  g.add(photo);
+  return g;
+}
+
 function buildStringLights() {
   const g = new THREE.Group();
   // bulbs alternate between two materials so the strand can run in alternating mode
@@ -1514,6 +1544,7 @@ export function buildRoom() {
   group.add(shell.group);
   group.add(buildRug());
   group.add(buildBed());
+  group.add(buildBedPrint());
   // bedside lamp on a slim nightstand between the bed head and the bookshelf
   const ns = buildNightstandAndLamp(-1.23, -3.85 + 0.23);
   group.add(ns.group);
