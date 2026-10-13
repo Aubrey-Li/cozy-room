@@ -483,7 +483,7 @@ export function createRose(handles, { sound = {}, onClimax } = {}) {
       else options.push(['cover', 3]);
     }
     if (!scene.cold && domeOn) options.push(['uncover', 3]);
-    if (scene.windowOpen) options.push(['window', 1.5]);
+    if (scene.windowOpen && scene.cold) options.push(['window', 1.5]); // she frets about the house letting its warmth out
     if (!scene.musicPlaying) options.push(['music', 0.8]);
     options.push(['musing', st.musing]);
     let r = Math.random() * options.reduce((sum, [, w]) => sum + w, 0);

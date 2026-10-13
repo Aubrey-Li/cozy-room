@@ -33,8 +33,8 @@ export const LINES = {
     ['Would you lift the glass? I want to feel the sun on my own.', 'Take the glass off? I\'d like to try standing in the open.'],
   ],
   window: [
-    ['Is that window open? I can feel the draft from here. Close it.', 'Shut that window. My petals are not for blowing about.'],
-    ['Would you close that window? There\'s a draft.', 'Your window\'s open. ...Not a complaint. Just an observation. A cold one.'],
+    ['Shut your window. You\'ll let all your warmth out, and then who will look after me?', 'Your window\'s open. Close it. I won\'t have the whole meadow listening in on us.'],
+    ['Would you close your window? You\'ll get cold in there, and then who\'d come and see me?', 'Your window\'s open. ...Not a complaint. Only, you\'ll let the warmth out.'],
     ['Your window\'s open. Mind you don\'t catch cold in there, either.', 'Close your window? I worry about you too, you know.'],
   ],
   music: [
