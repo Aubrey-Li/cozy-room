@@ -4,7 +4,7 @@ A cozy isometric room on a tiny planet, built with [three.js](https://threejs.or
 
 The sky follows your local clock and your real sunrise and sunset: the sun climbs to solar noon, sets behind the planet in the evening, and the stars come out at night. The moon shows tonight's phase and keeps its own hours, so a full moon rises at sunset and a crescent hangs near the sun. The planet turns with the seasons: cherry blossom opening on bare branches in spring, leaves growing out to a lush summer green, red and gold leaves in the fall, and in winter bare, snow-laden trees and snow that falls gently until it buries the whole planet. Each season holds for a while and eases into the next over a few weeks. Outside the room is a little meadow where fireflies drift once it gets dark, and a stone-edged pond beside the garden path where koi swim; the water glitters by day, catches the moonlight at night and frosts over in deep winter.
 
-Sun times and hemisphere come from your time zone's reference city (no location prompt). If the page already has location permission, your exact position is used instead. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery, a framed print of the Himalayas above the bed and string lights that glow warm orange after sunset.
+Sun times and hemisphere come from your time zone's reference city (no location prompt). If the page already has location permission, your exact position is used instead. Inside there is a bed, a bookshelf with books sorted by colour, a record player, a guitar, house plants, a photo gallery, a framed print of the Himalayas above the bed and string lights that glow warm orange after sunset. In the middle of the rug is a low tea table with a teapot and two cups of green tea; in winter a plaid quilt drops over it and it becomes a kotatsu, glowing warm underneath, with a bowl of mandarins on top. A grey tabby cat lives here too: she loafs on the floor cushion by day, sleeps curled up at the foot of the bed at night, and spends the winter under the kotatsu with just her head poking out, walking (and hopping) between her spots as the day and the year turn.
 
 ## Run it
 
@@ -22,10 +22,11 @@ three.js is loaded from a CDN via an import map, so a network connection is need
 - The clock in the corner shows the local time the scene is rendering. Tap it (or the arrow) to collapse the panel; it starts collapsed on small screens.
 - Click or tap the bookshelf to take down a book of public-domain poems: it opens over the room, and pages turn with the arrows, a click, a swipe or the arrow keys.
 - Click the desk monitor (or the chair) to play The Little Lamplighter, a short pixel-art game about giving your light away. Arrow keys or A/D to walk, Space to talk, light and hop; on phones, on-screen buttons. Its music and sounds are original and synthesized live in the browser.
+- Click the tea table to pour a cup of tea: the teapot lifts, tips and fills whichever cup is emptier, and the fresh tea steams for a while. Click the cat to pet her; she shuts her eyes, leans in and purrs.
 - Click the bedside lamp to step it through bright, medium, dim and off. The little switch beside the window cycles the string lights: steady, alternating, blinking and off.
 - Click or tap the window to swing it open; the sheer linen curtains billow into the room with the breeze. Click again to close it.
 - Click or tap the record player to open the song list. Picking a song drops the tonearm, spins up the record and sends music notes floating up; the arrow (or the panel title) minimizes it to a slim now-playing bar with play/pause while the song keeps going, and closing the panel stops the music. Songs stream through YouTube's embedded player, shown in the expanded panel and hidden in the mini bar. YouTube's API policies ask for a visible player of at least 200x200 while playing, so hiding it carries some risk of YouTube restricting playback.
-- The world has sound once you first click or tap: birdsong in spring (loudest at dawn), cicadas by day and crickets by night in summer, crisp gusts and skittering leaves in fall, and a soft hush in winter. It is muffled through the glass until you open the window. The window's latch and hinges and the book's cover and pages make their own small sounds, and the outdoors ducks under the record player and goes quiet while the game plays. All of it is synthesized live, with no audio files. The speaker button beside the clock turns it off, and the choice is remembered.
+- The world has sound once you first click or tap: birdsong in spring (loudest at dawn), cicadas by day and crickets by night in summer, crisp gusts and skittering leaves in fall, and a soft hush in winter. It is muffled through the glass until you open the window. The window's latch and hinges and the book's cover and pages make their own small sounds, and the outdoors ducks under the record player and goes quiet while the game plays. The cat purrs when petted and the teapot pours. All of it is synthesized live, with no audio files. The speaker button beside the clock turns it off, and the choice is remembered.
 - Drag the slider to scrub through the day. Press **Live** (or the `L` key) to return to the real clock.
 - Drag the second slider to scrub through the year and watch the seasons, sun times and moon change. Press **Today** to return to the real date.
 - The panel lists the date and season, today's sunrise and sunset, and the moon phase.
@@ -48,6 +49,8 @@ src/pond.js       the pond: water shader, bank, lily pads and koi
 src/seasons.js    seasonal colours, blossom, fallen leaves and snow cover
 src/weather.js    falling snow, autumn leaves and cherry petals
 src/room.js       the room and everything in it
+src/kotatsu.js    the tea table, its tea set and steam, and the winter quilt
+src/cat.js        the cat: her look, poses, walks between spots, and petting
 src/fireflies.js  fireflies over the meadow at night
 src/music.js      song list panel and YouTube player
 src/ambience.js   seasonal soundscape, window and page sounds (synthesized)

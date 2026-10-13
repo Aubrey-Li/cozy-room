@@ -168,7 +168,8 @@ scene.add(weather.group);
 // a lamp post out on the meadow, a little to the right of the house
 const lampPost = buildLampPost(6.4, -0.8);
 scene.add(lampPost.group);
-const room = buildRoom();
+// the room's own sounds (the cat's purr, the teapot) go through the ambience, created below
+const room = buildRoom({ sound: (kind, name) => ambience[kind][name]() });
 scene.add(room.group);
 const fireflies = new Fireflies(110);
 scene.add(fireflies.points);
@@ -378,6 +379,8 @@ const clickables = [
   { roots: room.windowTargets, action: () => ambience.window(room.toggleWindow()) },
   { roots: [room.lamp], action: () => room.cycleLamp() },
   { roots: [room.lightSwitch], action: () => room.cycleStringLights() },
+  { roots: [room.teaTable], action: () => room.pourTea() },
+  { roots: [room.cat], action: () => room.petCat() },
   { roots: rose.roots, action: () => rose.click() },
 ];
 const pickRoots = [room.group, ...rose.roots];
@@ -531,7 +534,7 @@ function frame() {
   applyLighting(state);
   sky.update(state, t, camera);
   room.setViewZoom(camera.zoom);
-  room.update(state, dt, t);
+  room.update(state, dt, t, season);
   lampPost.update(state, t);
   rose.update(dt, t, { night: state.night, season, windowOpen: room.windowOpen, musicPlaying, camera });
   wind.update(t);

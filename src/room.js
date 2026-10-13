@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } from './foliage.js';
 import { createLamplighter } from './games/lamplighter.js';
+import { buildTeaTable } from './kotatsu.js';
+import { createCat } from './cat.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
   makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture, makeArchRugTextures,
@@ -1293,12 +1295,16 @@ function buildGuitar() {
 }
 
 const RUG_T = 0.07; // pile thickness: plush enough to feel heavy underfoot
+const RUG = { x: 0.9, z: 1.1, r: 1.95 };
+const CUSHION = { x: 2.45, z: 1.05 };
+/** Floor height: the rug's pile is a little raised. */
+const groundY = (x, z) => RUG_T * (1 - THREE.MathUtils.smoothstep(Math.hypot(x - RUG.x, z - RUG.z), RUG.r - 0.06, RUG.r + 0.02));
 
 /** A thick, round velvet-pile rug carved with arches and lines, with a rounded, bound edge. */
 function buildRug() {
   const g = new THREE.Group();
-  const cx = 0.9, cz = 1.1;
-  const R = 1.95;
+  const cx = RUG.x, cz = RUG.z;
+  const R = RUG.r;
   const edge = 0.05; // radius of the rolled edge
   const { map, bump } = makeArchRugTextures();
   const pile = new THREE.MeshPhysicalMaterial({
@@ -1387,8 +1393,8 @@ function buildRug() {
 
 function buildExtras() {
   const g = new THREE.Group();
-  // a floor cushion by the rug
-  g.add(box(0.7, 0.2, 0.7, M.cushion, 2.4, RUG_T + 0.1, 1.9, { rounded: 0.08 })); // resting on the rug
+  // a floor cushion beside the tea table, the cat's daytime spot
+  g.add(box(0.7, 0.2, 0.7, M.cushion, CUSHION.x, RUG_T + 0.1, CUSHION.z, { rounded: 0.08 })); // resting on the rug
   // a small side table with a mug near the window
   g.add(cylinder(0.3, 0.3, 0.04, M.oak, 3.1, 0.5, -1.6, 20));
   g.add(cylinder(0.03, 0.04, 0.5, M.dark, 3.1, 0.25, -1.6, 8));
@@ -1405,6 +1411,40 @@ const LAMP_LEVELS = [1, 0.55, 0.2, 0];
 const BLINK_PERIOD = 2.4; // seconds per breath in blinking mode
 const LIGHT_MODES = ['on', 'alternate', 'blink', 'off'];
 const LED_COLORS = { on: 0xffd9a0, alternate: 0xffa64d, blink: 0xff8fb0, off: 0x000000 };
+
+/**
+ * The cat and her favourite spots: the floor cushion by day, the foot of the bed at
+ * night, and under the kotatsu in winter. Routes thread between the furniture.
+ */
+function buildCat(bed, quilt, sound) {
+  // find the top of the duvet where she sleeps
+  bed.updateMatrixWorld(true);
+  const bedSpot = { x: -1.95, z: -1.05 };
+  const ray = new THREE.Raycaster(new THREE.Vector3(bedSpot.x, 4, bedSpot.z), new THREE.Vector3(0, -1, 0));
+  const bedY = (ray.intersectObject(bed, true)[0]?.point.y ?? 0.92) - 0.015;
+  const toward = (dx, dz) => Math.atan2(dx, dz);
+  const spots = {
+    cushion: { pos: [CUSHION.x, RUG_T + 0.19, CUSHION.z], heading: toward(0.55, 1), pose: 'loaf' },
+    bed: { pos: [bedSpot.x, bedY, bedSpot.z], heading: toward(1, 0.3), pose: 'curl' },
+    // under the quilt, facing out with her head at the hem
+    kotatsu: { pos: [1.25, RUG_T, 1.43], heading: 0, pose: 'peek' },
+  };
+  const hop = (spot) => ({ x: spots[spot].pos[0], y: spots[spot].pos[1], z: spots[spot].pos[2], jump: true });
+  const down = (x, z) => ({ x, y: groundY(x, z), z, jump: true });
+  const inside = [1.25, 1.43];
+  const cushionBack = down(CUSHION.x, 0.35); // she gets on and off the cushion from behind
+  const bedSide = down(-1.0, -0.85);         // and onto the bed from beside its foot, clear of the duvet
+  const front = [1.25, 2.4];                 // in front of the kotatsu
+  const routes = {
+    'cushion>bed': [cushionBack, [0.25, -0.35], [-1.0, -0.85], hop('bed')],
+    'bed>cushion': [bedSide, [0.25, -0.35], [CUSHION.x, 0.35], hop('cushion')],
+    'cushion>kotatsu': [cushionBack, [3.1, 0.5], [3.05, 1.6], [2.4, 2.3], front, inside],
+    'kotatsu>cushion': [front, [2.4, 2.3], [3.05, 1.6], [3.1, 0.5], [CUSHION.x, 0.35], hop('cushion')],
+    'bed>kotatsu': [bedSide, [-0.6, 0.9], [-0.2, 2.3], front, inside],
+    'kotatsu>bed': [front, [-0.2, 2.3], [-0.6, 0.9], [-1.0, -0.85], hop('bed')],
+  };
+  return createCat({ spots, routes, groundY, quilt, sound });
+}
 
 // ---------------------------------------------------------------------------
 // Floating music notes that drift up from the turntable while a song plays
@@ -1538,12 +1578,14 @@ function createNotes(origin) {
 }
 const ARM_PLAY = -0.6;
 
-export function buildRoom() {
+/** `sound(kind, name)` plays one of the room's sounds, such as ('cat', 'purr'). */
+export function buildRoom({ sound = () => {} } = {}) {
   const group = new THREE.Group();
   const shell = buildShell();
   group.add(shell.group);
   group.add(buildRug());
-  group.add(buildBed());
+  const bed = buildBed();
+  group.add(bed);
   group.add(buildBedPrint());
   // bedside lamp on a slim nightstand between the bed head and the bookshelf
   const ns = buildNightstandAndLamp(-1.23, -3.85 + 0.23);
@@ -1577,10 +1619,24 @@ export function buildRoom() {
   group.add(sw.group);
   group.add(buildGuitar());
   group.add(buildExtras());
+  // the tea table on the rug, a kotatsu in winter
+  const tea = buildTeaTable({ x: RUG.x, z: RUG.z, floorY: RUG_T, wood: M.oak, fabricBump: T.fabric, sound: (name) => sound('tea', name) });
+  group.add(tea.group);
+  const cat = buildCat(bed, tea.footprint, (name) => sound('cat', name));
+  group.add(cat.group);
+  let kotatsuOn = null;
 
   // `time` is real seconds, so light patterns keep their rhythm even when frames are slow
-  function update(state, dt, time = elapsed) {
+  function update(state, dt, time = elapsed, season = null) {
     const k = state.indoor;
+
+    // the kotatsu goes up for winter, but never while the cat is still under it
+    const winter = season ? season.winter : 0;
+    if (kotatsuOn === null) kotatsuOn = winter > 0.5;
+    else if (winter > 0.55) kotatsuOn = true;
+    else if (winter < 0.45) kotatsuOn = false;
+    const quilt = tea.update(dt, time, { on: kotatsuOn || (cat.under && tea.amount > 0), cold: Math.max(state.night, winter), night: state.night });
+    cat.update(dt, time, { night: state.night, kotatsuReady: kotatsuOn && quilt > 0.98, quilt });
     const approach = (rate) => 1 - Math.exp(-dt * rate);
 
     // bedside lamp: follows the time of day until someone touches it, then holds their level
@@ -1676,6 +1732,10 @@ export function buildRoom() {
     windowTargets: [shell.hitPane, ...shell.sashes, ...shell.curtains.map((c) => c.mesh)],
     lamp: ns.group,
     lightSwitch: sw.group,
+    teaTable: tea.group,
+    cat: cat.roots[0],
+    pourTea: () => tea.pour(),
+    petCat: () => cat.pet(),
     /** Touch-lamp style: bright, medium, dim, off, and around again. */
     cycleLamp() {
       if (!lampState.manual) {

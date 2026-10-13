@@ -611,6 +611,80 @@ export function createAmbience({ context = null } = {}) {
     },
   };
 
+  const catSounds = {
+    // a purr: a low rumble pulsing about 25 times a second, swelling with each breath in and out
+    purr(t = ctx.currentTime + 0.01, dur = 3.4) {
+      const src = ctx.createBufferSource();
+      src.buffer = n.noise;
+      src.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 420;
+      lp.Q.value = 0.8;
+      const pulse = ctx.createGain();
+      pulse.gain.value = 0.55;
+      const rate = ctx.createOscillator();
+      rate.frequency.setValueAtTime(26, t);
+      const depth = ctx.createGain();
+      depth.gain.value = 0.45;
+      rate.connect(depth).connect(pulse.gain);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, t);
+      // breaths of about a second; breathing in is a little softer and higher
+      const breath = 1.05;
+      for (let k = 0; k * breath < dur; k++) {
+        const b = t + k * breath;
+        const inhale = k % 2 === 0;
+        env.gain.linearRampToValueAtTime(inhale ? 0.1 : 0.13, b + 0.18);
+        env.gain.setValueAtTime(inhale ? 0.1 : 0.13, b + breath - 0.22);
+        env.gain.linearRampToValueAtTime(0.03, b + breath - 0.04);
+        rate.frequency.setValueAtTime(inhale ? 27 : 24, b);
+      }
+      env.gain.linearRampToValueAtTime(0.0001, t + dur + 0.1);
+      src.connect(lp).connect(pulse).connect(env).connect(n.indoor);
+      src.start(t, rand(0, 3.5));
+      rate.start(t);
+      src.stop(t + dur + 0.15);
+      rate.stop(t + dur + 0.15);
+    },
+  };
+
+  const teaSounds = {
+    // a thin stream into a small cup, its note climbing as the cup fills
+    pour(t = ctx.currentTime + 0.01, dur = 1.05) {
+      const src = ctx.createBufferSource();
+      src.buffer = n.noise;
+      src.loop = true;
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.Q.value = 3.5;
+      bp.frequency.setValueAtTime(850, t);
+      bp.frequency.exponentialRampToValueAtTime(1750, t + dur);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.07, t + 0.06);
+      g.gain.setValueAtTime(0.07, t + dur - 0.15);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      // the trickle wavers
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 11;
+      const lg = ctx.createGain();
+      lg.gain.value = 0.02;
+      lfo.connect(lg).connect(g.gain);
+      src.connect(bp).connect(g).connect(n.indoor);
+      src.start(t, rand(0, 3.5));
+      lfo.start(t);
+      src.stop(t + dur + 0.05);
+      lfo.stop(t + dur + 0.05);
+      burst(t, dur, { gain: 0.012, type: 'highpass', from: 3500, q: 0.7 });
+    },
+    // the pot set back down on the table
+    set(t = ctx.currentTime + 0.01) {
+      thud(t, 0.16);
+      glassRing(t, 1650, 0.008, 0.18);
+    },
+  };
+
   // ---------------------------------------------------------------- lifecycle
   function ensure() {
     if (n) return true;
@@ -710,6 +784,8 @@ export function createAmbience({ context = null } = {}) {
     },
     book: new Proxy(bookSounds, { get: (o, k) => live(o[k]) }),
     rose: new Proxy(roseSounds, { get: (o, k) => live(o[k]) }),
+    cat: new Proxy(catSounds, { get: (o, k) => live(o[k]) }),
+    tea: new Proxy(teaSounds, { get: (o, k) => live(o[k]) }),
     get enabled() { return enabled; },
     setEnabled(on) {
       enabled = on;
@@ -730,6 +806,8 @@ export function createAmbience({ context = null } = {}) {
       windowSound: (open, t) => { windowOpen = open; windowSound(open, t); },
       bookSounds,
       roseSounds,
+      catSounds,
+      teaSounds,
       get nodes() { return n; },
     } : undefined,
   };
