@@ -8,6 +8,7 @@ export const SONGS = [
   { id: 'JYuyWrkwpok', title: 'Fly Me to the Moon', artist: 'Frank Sinatra', sleeve: '#e4ad4c' },
   { id: 'mhpRipG9Zss', title: 'Katawaredoki', artist: 'RADWIMPS', sleeve: '#4f7a9c' },
   { id: '0Uhh62MUEic', title: 'One Last Kiss', artist: 'Hikaru Utada', sleeve: '#b3462f' },
+  { id: 'FMJcw2AHzm4', title: 'Running Up That Hill', artist: 'Kate Bush (epic version)', sleeve: '#6b4f8a' },
 ];
 
 let apiPromise = null;

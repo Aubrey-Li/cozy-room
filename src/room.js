@@ -4,6 +4,7 @@ import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } f
 import { createLamplighter } from './games/lamplighter.js';
 import { buildTeaTable } from './kotatsu.js';
 import { createCat } from './cat.js';
+import { SONGS } from './music.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
   makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture, makeArchRugTextures,
@@ -651,10 +652,9 @@ function buildRecordPlayer() {
     cone.rotation.x = Math.PI / 2;
     g.add(cone);
   }
-  // records leaning against the cabinet front, below the speaker
-  const sleeves = [0xe4ad4c, 0x4f7a9c, 0xb3462f];
-  sleeves.forEach((col, i) => {
-    const r = box(0.5, 0.5, 0.012, mat(col), -0.33 + i * 0.03, 0.26, D / 2 + 0.06 + i * 0.025);
+  // records leaning against the cabinet front, below the speaker: one sleeve per song
+  SONGS.forEach(({ sleeve }, i) => {
+    const r = box(0.5, 0.5, 0.012, mat(sleeve), -0.33 + i * 0.03, 0.26, D / 2 + 0.06 + i * 0.025);
     r.rotation.x = -0.16 + i * 0.03; // tops resting back against the cabinet
     g.add(r);
   });
