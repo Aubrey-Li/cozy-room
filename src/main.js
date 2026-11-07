@@ -25,8 +25,12 @@ import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTi
 // Renderer
 // ---------------------------------------------------------------------------
 const canvas = document.getElementById('scene');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+// On high-density screens the pixels are already small enough that edges look smooth, and
+// multisampling a 2x buffer four times over costs a couple of hundred MB of GPU memory, so
+// antialiasing is only switched on for ordinary (1x) screens, where the buffer is small.
+const PIXEL_RATIO = Math.min(window.devicePixelRatio, 2);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: PIXEL_RATIO < 1.5, powerPreference: 'high-performance' });
+renderer.setPixelRatio(PIXEL_RATIO);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -430,7 +434,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, controls, room, decor, painting, music, book, gameWindow, planet, seasons, ambience, rose, THREE };
+  window.__cozy = { renderer, scene, camera, controls, room, decor, painting, music, book, gameWindow, planet, seasons, ambience, rose, THREE };
 }
 
 function updateHover() {
@@ -515,7 +519,32 @@ function applyLighting(s) {
   hemi.intensity = s.sky.hemiI;
 }
 
-function frame() {
+// ---------------------------------------------------------------------------
+// Frame pacing. Almost everything here moves slowly (the sky, wind, fireflies, the
+// cat), and it looks the same at 30 fps as at a display's full rate (120 Hz on many
+// laptops) for a fraction of the work, and of the fan. While the camera is moving
+// the scene runs at 60 so drags and zooms stay smooth; with the window in the
+// background it drops to 20.
+// ---------------------------------------------------------------------------
+const FPS = { moving: 60, idle: 30, background: 20 };
+if (window.__cozy) window.__cozy.FPS = FPS; // ?debug: tweak the pacing live
+let movingUntil = 0;
+const keepMoving = (ms = 400) => { movingUntil = Math.max(movingUntil, performance.now() + ms); };
+// OrbitControls reports every camera change, including its damped drift to a stop
+controls.addEventListener('change', () => keepMoving());
+canvas.addEventListener('pointerdown', () => keepMoving(800));
+canvas.addEventListener('wheel', () => keepMoving(), { passive: true });
+let lastFrame = -Infinity;
+function frameInterval(now) {
+  const moving = now < movingUntil || keysDown.size > 0 || glide !== null;
+  const fps = moving ? FPS.moving : document.hasFocus() ? FPS.idle : FPS.background;
+  return 1000 / fps;
+}
+
+function frame(now) {
+  // a couple of ms of slack, so a 60 Hz display draws every other frame rather than drifting to every third
+  if (now - lastFrame < frameInterval(now) - 2) return;
+  lastFrame = now;
   const dt = Math.min(clock.getDelta(), 0.1);
   // painting is quiet, absorbed work: the world outside softens the way it does for reading
   ambience.setFocus({ music: musicPlaying, book: book.isOpen || painting.isOpen, game: gameWindow.isOpen, rose: roseMoment });

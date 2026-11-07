@@ -1173,7 +1173,8 @@ function buildStringLights() {
  */
 function buildHalo(wall, positions) {
   const span = 8, y0 = 2.2, y1 = 5.0, h = y1 - y0;
-  const W = 1024, H = Math.round((W * h) / span);
+  // a soft gradient, so half resolution looks the same as full and keeps four of these light
+  const W = 512, H = Math.round((W * h) / span);
   const c = document.createElement('canvas');
   c.width = W;
   c.height = H;
@@ -1197,11 +1198,12 @@ function buildHalo(wall, positions) {
     ctx.globalCompositeOperation = 'destination-out';
     const wx0 = ((1.0 + 4) / span) * W, wx1 = ((3.2 + 4) / span) * W;
     const wy0 = (1 - (3.9 - y0) / h) * H;
-    const fadeTop = ctx.createLinearGradient(0, wy0 - 12, 0, wy0 + 6);
+    const px = W / 1024; // the fade was tuned in pixels at 1024 wide
+    const fadeTop = ctx.createLinearGradient(0, wy0 - 12 * px, 0, wy0 + 6 * px);
     fadeTop.addColorStop(0, 'rgba(0,0,0,0)');
     fadeTop.addColorStop(1, 'rgba(0,0,0,1)');
     ctx.fillStyle = fadeTop;
-    ctx.fillRect(wx0, wy0 - 12, wx1 - wx0, H);
+    ctx.fillRect(wx0, wy0 - 12 * px, wx1 - wx0, H);
   }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;

@@ -225,11 +225,14 @@ export function buildEasel({ wood, darkWood }) {
   });
   g.add(jar);
 
-  /** Show an image (a canvas) on the easel's canvas, scaled to fill it. */
+  /**
+   * Show an image (a canvas or bitmap) on the easel's canvas, scaled to fill it. It
+   * may be just the paint with no paper behind it, so the bare primed canvas goes down first.
+   */
   function setPainting(source) {
     const ctx = paintCanvas.getContext('2d');
+    primedCanvas(ctx, paintCanvas.width, paintCanvas.height);
     if (source) ctx.drawImage(source, 0, 0, paintCanvas.width, paintCanvas.height);
-    else primedCanvas(ctx, paintCanvas.width, paintCanvas.height);
     paintTex.needsUpdate = true;
   }
 

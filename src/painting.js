@@ -14,7 +14,8 @@ import { CANVAS_ASPECT } from './easel.js';
 
 const W = 1000;
 const H = Math.round(W / CANVAS_ASPECT);
-const UNDO_LIMIT = 12;
+const UNDO_STEPS = 40;
+const UNDO_BUDGET = 8e6; // pixels of history kept (~32 MB); a stroke only stores the patch it changed
 const STREAMLINE = 0.45; // how much the pointer is smoothed before the brush follows it
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -227,11 +228,37 @@ async function dbSet(key, value) {
 
 // ---------------------------------------------------------------------------
 
-/** onChange(canvas) is called with the finished picture (paper and paint) whenever the easel should update. */
+/**
+ * The painting app. Nothing heavy is built until the easel is first clicked: at
+ * load, only the saved painting is fetched and handed to onChange so the easel in
+ * the room shows it. onChange(image) is called with the picture whenever the
+ * easel should update (the paint layer alone at load, paper and paint after).
+ */
 export function createPainting({ onChange = () => {} } = {}) {
+  let studio = null;
+  (async () => {
+    try {
+      const blob = await dbGet('painting');
+      if (blob && !studio) onChange(await createImageBitmap(blob));
+    } catch { /* storage unavailable: the easel stays bare */ }
+  })();
+  return {
+    open(at) {
+      studio ||= buildStudio({ onChange });
+      return studio.open(at);
+    },
+    close() { return studio?.close(); },
+    get isOpen() { return studio?.isOpen ?? false; },
+  };
+}
+
+function buildStudio({ onChange }) {
   const { paper, toothMask, tooth, blooms, T: TILE } = makePaper();
   const paint = canvas2d(W, H);
   const pctx = paint.getContext('2d');
+  // the paint as it stood after the last finished stroke, so each undo step only has to keep the patch that changed
+  const base = canvas2d(W, H);
+  const bctx = base.getContext('2d');
   const wet = canvas2d(W, H);
   const wctx = wet.getContext('2d');
   const patterns = {
@@ -332,40 +359,46 @@ export function createPainting({ onChange = () => {} } = {}) {
     if (!raf) raf = requestAnimationFrame(() => { raf = 0; if (dirty) render(); });
   }
 
-  // ---- undo
-  function snapshot() {
-    const c = canvas2d(W, H);
-    c.getContext('2d').drawImage(paint, 0, 0);
-    return c;
-  }
-  function restore(c) {
-    pctx.globalCompositeOperation = 'source-over';
-    pctx.globalAlpha = 1;
-    pctx.clearRect(0, 0, W, H);
-    pctx.drawImage(c, 0, 0);
-  }
-  function pushUndo() {
-    undoStack.push(snapshot());
-    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  // ---- undo: each step is the rectangle a stroke touched, as it was before
+  const crop = (src, r) => {
+    const c = canvas2d(r.w, r.h);
+    c.getContext('2d').drawImage(src, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    return { rect: r, pixels: c };
+  };
+  const put = (ctx, patch) => {
+    const { x, y, w, h } = patch.rect;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.clearRect(x, y, w, h);
+    ctx.drawImage(patch.pixels, x, y);
+  };
+  /** After a change to `rect` of the paint, remember what was there before and move the base on. */
+  function commit(rect) {
+    if (!rect) return;
+    undoStack.push(crop(base, rect));
     redoStack.length = 0;
-    reflectHistory();
+    // keep the history within its budget, oldest first (but always the latest step)
+    let px = undoStack.reduce((n, p) => n + p.rect.w * p.rect.h, 0);
+    while (undoStack.length > 1 && (undoStack.length > UNDO_STEPS || px > UNDO_BUDGET)) {
+      const old = undoStack.shift();
+      px -= old.rect.w * old.rect.h;
+    }
+    put(bctx, crop(paint, rect));
   }
-  function undo() {
-    if (stroke || !undoStack.length) return;
-    redoStack.push(snapshot());
-    restore(undoStack.pop());
+  function step(from, to) {
+    if (stroke || !from.length) return;
+    const patch = from.pop();
+    to.push(crop(paint, patch.rect));
+    put(pctx, patch);
+    put(bctx, patch);
     changed();
   }
-  function redo() {
-    if (stroke || !redoStack.length) return;
-    undoStack.push(snapshot());
-    restore(redoStack.pop());
-    changed();
-  }
+  const undo = () => step(undoStack, redoStack);
+  const redo = () => step(redoStack, undoStack);
   function clearAll() {
     if (stroke) return;
-    pushUndo();
     pctx.clearRect(0, 0, W, H);
+    commit({ x: 0, y: 0, w: W, h: H });
     changed();
   }
   function reflectHistory() {
@@ -390,7 +423,10 @@ export function createPainting({ onChange = () => {} } = {}) {
       const blob = await dbGet('painting');
       if (!blob) return;
       const bmp = await createImageBitmap(blob);
+      if (undoStack.length || stroke) return; // already painting: never paint the old picture over new work
       pctx.drawImage(bmp, 0, 0, W, H);
+      bctx.drawImage(bmp, 0, 0, W, H);
+      bmp.close();
       render();
       onChange(view);
     } catch { /* storage unavailable: start with a fresh canvas */ }
@@ -780,8 +816,14 @@ export function createPainting({ onChange = () => {} } = {}) {
     stroke.last = prev;
   }
 
+  /** Grow the stroke's undo rectangle to cover a brush at this point (generous: oil splays, washes bleed). */
+  function reach(at) {
+    grow(stroke.bb, at.x, at.y, radius() * 1.6 + 24);
+  }
+
   function addPoint(e) {
     const raw = toCanvas(e);
+    reach(raw);
     const st = stroke;
     const p = pressureOf(e, st, raw);
     st.raw = raw;
@@ -811,8 +853,9 @@ export function createPainting({ onChange = () => {} } = {}) {
       m: pt,
       b: pt,
       last: pt,
+      bb: box(), // everything the stroke could have touched, for undo
     };
-    pushUndo();
+    reach(at);
     brushes[tool].begin(pt);
     brushes[tool].flush?.();
     invalidate();
@@ -828,7 +871,9 @@ export function createPainting({ onChange = () => {} } = {}) {
     brush.end?.();
     pctx.globalAlpha = 1;
     pctx.globalCompositeOperation = 'source-over';
+    const touched = rectOf(stroke.bb);
     stroke = null;
+    commit(touched);
     changed();
   }
 
