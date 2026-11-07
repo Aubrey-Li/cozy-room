@@ -4,10 +4,12 @@ import { leafGeometry, profiles, leafMaterial, stem, arcStem, placeLeaf, pot } f
 import { createLamplighter } from './games/lamplighter.js';
 import { buildTeaTable } from './kotatsu.js';
 import { createCat } from './cat.js';
+import { buildEasel, buildStool } from './easel.js';
+import { POND } from './pond.js';
 import { SONGS } from './music.js';
 import {
   makePlankTexture, makePhotoTexture, makeVinylTexture,
-  makeFabricBump, makePlasterBump, makeWoodTexture, makeLinenTexture, makeArchRugTextures,
+  makeFabricBump, makePlasterBump, makeWoodTexture, makeStraightWoodTexture, makeLinenTexture, makeArchRugTextures,
 } from './textures.js';
 
 // Room footprint: x in [-4, 4], z in [-4, 4]. Floor top at y = 0.
@@ -40,6 +42,7 @@ const T = {
   plaster: makePlasterBump(),
   walnut: makeWoodTexture(0x8a5a36, 0x4a2c15, 512, 5),
   oak: makeWoodTexture(0xd2a874, 0x8a6236, 512, 9),
+  oakStraight: makeStraightWoodTexture(0xd2a874, 0x8a6236, 512, 9),
 };
 
 const M = {
@@ -1297,6 +1300,8 @@ function buildGuitar() {
 const RUG_T = 0.07; // pile thickness: plush enough to feel heavy underfoot
 const RUG = { x: 0.9, z: 1.1, r: 1.95 };
 const CUSHION = { x: 2.45, z: 1.05 };
+// beside the monstera in the front corner, clear of its leaves (which fan toward the room)
+const EASEL = { x: -1.7, z: 3.35 };
 /** Floor height: the rug's pile is a little raised. */
 const groundY = (x, z) => RUG_T * (1 - THREE.MathUtils.smoothstep(Math.hypot(x - RUG.x, z - RUG.z), RUG.r - 0.06, RUG.r + 0.02));
 
@@ -1395,11 +1400,6 @@ function buildExtras() {
   const g = new THREE.Group();
   // a floor cushion beside the tea table, the cat's daytime spot
   g.add(box(0.7, 0.2, 0.7, M.cushion, CUSHION.x, RUG_T + 0.1, CUSHION.z, { rounded: 0.08 })); // resting on the rug
-  // a small side table with a mug near the window
-  g.add(cylinder(0.3, 0.3, 0.04, M.oak, 3.1, 0.5, -1.6, 20));
-  g.add(cylinder(0.03, 0.04, 0.5, M.dark, 3.1, 0.25, -1.6, 8));
-  g.add(cylinder(0.2, 0.26, 0.03, M.dark, 3.1, 0.015, -1.6, 20));
-  g.add(cylinder(0.07, 0.06, 0.12, mat(0xf2efe9), 3.05, 0.58, -1.62, 14));
   return g;
 }
 
@@ -1619,6 +1619,16 @@ export function buildRoom({ sound = () => {} } = {}) {
   group.add(sw.group);
   group.add(buildGuitar());
   group.add(buildExtras());
+  // the painting corner beside the monstera; the canvas faces out across the meadow to the pond
+  const easel = buildEasel({ wood: M.oak, darkWood: M.walnut });
+  easel.group.position.set(EASEL.x, 0, EASEL.z);
+  easel.group.rotation.y = Math.atan2(POND.dx - EASEL.x, POND.dz - EASEL.z);
+  // a swivel stool where the painter sits, in front of the canvas; part of the easel, so clicking it opens the canvas too
+  const stool = buildStool({ grain: T.oakStraight });
+  stool.position.set(0.06, 0, 0.58);
+  stool.rotation.y = 0.2; // the sitter faces the canvas, the stool turned a touch as if just pushed back
+  easel.group.add(stool);
+  group.add(easel.group);
   // the tea table on the rug, a kotatsu in winter
   const tea = buildTeaTable({ x: RUG.x, z: RUG.z, floorY: RUG_T, wood: M.oak, fabricBump: T.fabric, sound: (name) => sound('tea', name) });
   group.add(tea.group);
@@ -1733,6 +1743,9 @@ export function buildRoom({ sound = () => {} } = {}) {
     lamp: ns.group,
     lightSwitch: sw.group,
     teaTable: tea.group,
+    easel: easel.group,
+    /** Show a canvas (the user's painting) on the easel, or null for a bare canvas. */
+    setPainting: (source) => easel.setPainting(source),
     cat: cat.roots[0],
     pourTea: () => tea.pour(),
     petCat: () => cat.pet(),

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from './sky.js';
 import { buildPlanet, buildLampPost } from './planet.js';
 import { buildPond } from './pond.js';
+import { buildDecor } from './decor.js';
 import { createSeasons } from './seasons.js';
 import { createWeather } from './weather.js';
 import {
@@ -15,6 +16,7 @@ import { createWind } from './wind.js';
 import { createMusicPanel } from './music.js';
 import { createBook } from './book.js';
 import { createGameOverlay } from './game.js';
+import { createPainting } from './painting.js';
 import { createAmbience } from './ambience.js';
 import { createRose } from './rose.js';
 import { localHours, computeSky, createSkyState, formatClock, phaseName, parseTimeParam, solarHours } from './time.js';
@@ -168,6 +170,9 @@ scene.add(weather.group);
 // a lamp post out on the meadow, a little to the right of the house
 const lampPost = buildLampPost(6.4, -0.8);
 scene.add(lampPost.group);
+// pumpkins by the front path in the fall, a lit tree there over Christmas
+const decor = buildDecor();
+scene.add(decor.group);
 // the room's own sounds (the cat's purr, the teapot) go through the ambience, created below
 const room = buildRoom({ sound: (kind, name) => ambience[kind][name]() });
 scene.add(room.group);
@@ -372,6 +377,8 @@ const rose = createRose(planet.rose, {
   },
 });
 const gameWindow = createGameOverlay();
+// the easel's canvas opens into a painting app; whatever is painted shows on the easel in the room
+const painting = createPainting({ onChange: (picture) => room.setPainting(picture) });
 const clickables = [
   { roots: [room.recordPlayer], action: () => music.open() },
   { roots: [room.bookshelf], action: (at) => book.open(at) },
@@ -380,6 +387,7 @@ const clickables = [
   { roots: [room.lamp], action: () => room.cycleLamp() },
   { roots: [room.lightSwitch], action: () => room.cycleStringLights() },
   { roots: [room.teaTable], action: () => room.pourTea() },
+  { roots: [room.easel], action: (at) => painting.open(at) },
   { roots: [room.cat], action: () => room.petCat() },
   { roots: rose.roots, action: () => rose.click() },
 ];
@@ -422,7 +430,7 @@ canvas.addEventListener('pointermove', (e) => {
 });
 // ?debug exposes a few handles for automated checks
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__cozy = { camera, controls, room, music, book, gameWindow, planet, seasons, ambience, rose, THREE };
+  window.__cozy = { camera, controls, room, decor, painting, music, book, gameWindow, planet, seasons, ambience, rose, THREE };
 }
 
 function updateHover() {
@@ -464,6 +472,7 @@ const nightDir = new THREE.Vector3();
 const viewDir = new THREE.Vector3();
 const pondLight = { sunDir, moonDir, viewDir };
 const clock = new THREE.Clock();
+const bufferSize = new THREE.Vector2();
 let hudTimer = 1; // force a HUD refresh on the first frame
 
 function applyLighting(s) {
@@ -508,10 +517,12 @@ function applyLighting(s) {
 
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.1);
-  ambience.setFocus({ music: musicPlaying, book: book.isOpen, game: gameWindow.isOpen, rose: roseMoment });
-  rose.setHidden(book.isOpen || gameWindow.isOpen);
-  // the scene sits frozen and blurred behind the book, so skip rendering it while reading
-  if (book.isOpen || gameWindow.isOpen) return;
+  // painting is quiet, absorbed work: the world outside softens the way it does for reading
+  ambience.setFocus({ music: musicPlaying, book: book.isOpen || painting.isOpen, game: gameWindow.isOpen, rose: roseMoment });
+  const overlayOpen = book.isOpen || gameWindow.isOpen || painting.isOpen;
+  rose.setHidden(overlayOpen);
+  // the scene sits frozen and blurred behind the book, the game and the canvas, so skip rendering it
+  if (overlayOpen) return;
   const t = clock.elapsedTime;
   const hours = currentHours();
   const moment = sceneMoment();
@@ -536,6 +547,8 @@ function frame() {
   room.setViewZoom(camera.zoom);
   room.update(state, dt, t, season);
   lampPost.update(state, t);
+  renderer.getDrawingBufferSize(bufferSize);
+  decor.update(dt, t, { season, date: moment, night: state.indoor, pxPerUnit: (bufferSize.y * camera.zoom) / FRUSTUM_H });
   rose.update(dt, t, { night: state.night, season, windowOpen: room.windowOpen, musicPlaying, camera });
   wind.update(t);
   fireflies.update(t, state.night * (1 - season.winter));

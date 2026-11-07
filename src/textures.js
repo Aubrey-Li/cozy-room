@@ -362,6 +362,25 @@ export function makeWoodTexture(baseHex, darkHex, size = 512, seed = 5) {
   return repeat(srgb(new THREE.CanvasTexture(c)), 1);
 }
 
+/** Straight-grained wood (quarter-sawn): parallel lines along u, varying only in tone and width. */
+export function makeStraightWoodTexture(baseHex, darkHex, size = 512, seed = 7) {
+  const c = canvas(size, size);
+  const ctx = c.getContext('2d');
+  const rnd = seeded(seed);
+  const base = new THREE.Color(baseHex);
+  const dark = new THREE.Color(darkHex);
+  ctx.fillStyle = `#${base.getHexString()}`;
+  ctx.fillRect(0, 0, size, size);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < 90; i++) {
+    const y = rnd() * size;
+    tmp.copy(base).lerp(dark, 0.25 + rnd() * 0.45);
+    ctx.fillStyle = `rgba(${Math.round(tmp.r * 255)},${Math.round(tmp.g * 255)},${Math.round(tmp.b * 255)},${0.2 + rnd() * 0.35})`;
+    ctx.fillRect(0, y, size, 0.6 + rnd() * 2.2);
+  }
+  return repeat(srgb(new THREE.CanvasTexture(c)), 1);
+}
+
 /** A single leaf on a transparent background, tinted per instance. */
 export function makeLeafTexture(size = 128) {
   const c = canvas(size, size);
